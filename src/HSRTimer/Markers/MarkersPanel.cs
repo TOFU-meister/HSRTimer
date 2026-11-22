@@ -245,7 +245,7 @@ namespace HSRTimer
             GUIStyle label, GUIStyle value, GUIStyle small, GUIStyle toggle, GUIStyle button, GUIStyle textField)
         {
             // Name input (R10.5.3).
-            def.name = TextField(loc.Get("MARKER_NAME"), def.name, textField, label);
+            def.name = TextField(loc.Get("MARKER_NAME"), def.name, textField, label, FieldKey(def, "name"));
 
             // Type dropdown (button + collapsible list).
             GUILayout.BeginHorizontal();
@@ -480,7 +480,7 @@ namespace HSRTimer
                 buf = value.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture);
                 _floatBuf[bufKey] = buf;
             }
-            string next = GUILayout.TextField(buf, textField, GUILayout.Width(80));
+            string next = PanelTextInput.Draw("marker:" + bufKey, buf, textField, GUILayout.Width(80));
             _floatBuf[bufKey] = next;
             GUILayout.Label(labelText, label);
             GUILayout.EndHorizontal();
@@ -503,7 +503,7 @@ namespace HSRTimer
                 buf = value.ToString(System.Globalization.CultureInfo.InvariantCulture);
                 _floatBuf[bufKey] = buf;
             }
-            string next = GUILayout.TextField(buf, textField, GUILayout.Width(80));
+            string next = PanelTextInput.Draw("marker:" + bufKey, buf, textField, GUILayout.Width(80));
             _floatBuf[bufKey] = next;
             GUILayout.Label(labelText, label);
             GUILayout.EndHorizontal();
@@ -517,10 +517,10 @@ namespace HSRTimer
             return value;
         }
 
-        private static string TextField(string labelText, string value, GUIStyle textField, GUIStyle label)
+        private static string TextField(string labelText, string value, GUIStyle textField, GUIStyle label, string fieldKey)
         {
             GUILayout.BeginHorizontal();
-            string next = GUILayout.TextField(value ?? "", textField, GUILayout.Width(220));
+            string next = PanelTextInput.Draw("marker:" + fieldKey, value, textField, GUILayout.Width(220));
             GUILayout.Label(labelText, label);
             GUILayout.EndHorizontal();
             if (next != (value ?? "")) MarkDirty();

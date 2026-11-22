@@ -27,6 +27,8 @@ namespace HSRTimer
         private GUI.WindowFunction _drawWindow;
         private bool _drawFailed;
         private bool _drawWarningLogged;
+        private readonly HashSet<int> _failedPages = new HashSet<int>();
+        private readonly HashSet<int> _loggedPageFailures = new HashSet<int>();
 #endif
         private bool _visible;
 
@@ -148,6 +150,10 @@ namespace HSRTimer
         public void Toggle()
         {
             _visible = !_visible;
+#if STORE_IL2CPP
+            PanelTextInput.Cancel();
+            _failedPages.Clear();
+#endif
             if (!_visible && ConfigService.Instance != null)
                 ConfigService.Instance.SaveSettings();
             if (_visible)
@@ -290,6 +296,16 @@ namespace HSRTimer
             if (tabRegistry != null)
                 tabRegistry.NotifyLanguageChanged(loc.CurrentCode);
 
+#if STORE_IL2CPP
+            // A click outside the active field discards its unsubmitted draft.
+            // A field button can start a fresh edit on MouseUp.
+            if (Event.current.type == EventType.MouseDown && Event.current.button == 0)
+            {
+                PanelTextInput.Cancel();
+                _pendingRebind = null;
+            }
+#endif
+
             // Capture a keypress for an in-progress rebind before any widget
             // consumes the event. Mouse side buttons arrive as MouseDown
             // rather than KeyDown, so handle both event types.
@@ -321,6 +337,10 @@ namespace HSRTimer
                 }
             }
 
+#if STORE_IL2CPP
+            // Register the title bar even if the active page later fails.
+            GUI.DragWindow(new Rect(0, 0, _rect.width, 20));
+#endif
             // Left-hand vertical category navigation, kept outside the scroll view.
             RefreshTabDisplays();
             if (_tab >= _tabDisplays.Length) _tab = Mathf.Max(0, _tabDisplays.Length - 1);
@@ -332,6 +352,9 @@ namespace HSRTimer
                 int nextTab = DrawChoices(_tab, _tabDisplays, 1, GUILayout.Width(120));
                 if (nextTab != _tab)
                 {
+#if STORE_IL2CPP
+                    PanelTextInput.Cancel();
+#endif
                     _tab = nextTab;
                     _presetDeleting = false;
                     _timerHudOpen = false;
@@ -348,25 +371,59 @@ namespace HSRTimer
 
                 try
                 {
-                    switch (_tab)
+#if STORE_IL2CPP
+                    if (_failedPages.Contains(_tab))
                     {
-                        case 0: DrawAbout(loc); break;
-                        case 1: DrawGeneral(cfg, s, loc); break;
-                        case 2: DrawInterface(cfg, loc); break;
-                        case 3: DrawCategory(cfg, loc); break;
-                        case 4: DrawSubsegment(cfg, s, loc); break;
-                        case 5: DrawMarkers(cfg, loc); break;
-                        default: DrawExternalTab(_tab - _tabKeys.Length); break;
+                        GUILayout.Label("This page could not be drawn. Close and reopen the settings window to retry.", _small);
                     }
-
+                    else
+                    {
+                        GUILayout.Label("Click a field to edit. Enter applies, Esc cancels, Ctrl+V pastes.", _small);
+                        DrawStorePage(cfg, s, loc);
+                    }
+#else
+                    DrawPage(cfg, s, loc);
+#endif
                     GUILayout.Space(8);
-
                 }
                 finally { GUILayout.EndScrollView(); }
             }
             finally { GUILayout.EndHorizontal(); }
 
+#if !STORE_IL2CPP
             GUI.DragWindow(new Rect(0, 0, _rect.width, 20));
+#endif
+        }
+
+#if STORE_IL2CPP
+        private void DrawStorePage(ConfigService cfg, SettingsModel settings, LocalizationService loc)
+        {
+            try
+            {
+                DrawPage(cfg, settings, loc);
+            }
+            catch (System.Exception ex)
+            {
+                _failedPages.Add(_tab);
+                PanelTextInput.Cancel();
+                if (_loggedPageFailures.Add(_tab))
+                    Plugin.Logger.LogWarning($"HSRTimer: settings page {_tab} failed: {ex}");
+            }
+        }
+#endif
+
+        private void DrawPage(ConfigService cfg, SettingsModel s, LocalizationService loc)
+        {
+            switch (_tab)
+            {
+                case 0: DrawAbout(loc); break;
+                case 1: DrawGeneral(cfg, s, loc); break;
+                case 2: DrawInterface(cfg, loc); break;
+                case 3: DrawCategory(cfg, loc); break;
+                case 4: DrawSubsegment(cfg, s, loc); break;
+                case 5: DrawMarkers(cfg, loc); break;
+                default: DrawExternalTab(_tab - _tabKeys.Length); break;
+            }
         }
 
         // ── Page: About (R12: plugin name, version, license notice, repository link;
@@ -677,7 +734,7 @@ namespace HSRTimer
                 buf = live.ToString(CultureInfo.InvariantCulture);
 
             GUILayout.BeginHorizontal();
-            string next = GUILayout.TextField(buf, _textField, GUILayout.Width(52));
+            string next = PanelTextInput.Draw("column:" + key, buf, _textField, GUILayout.Width(52));
             GUILayout.Label(TimerHudRowLabel(row, loc), _label);
             GUILayout.EndHorizontal();
 
@@ -1057,10 +1114,10 @@ namespace HSRTimer
             return GUILayout.HorizontalSlider(value, min, max);
         }
 
-        private float FloatFieldRow(string label, float value, string format = "F0")
+        private float FloatFieldRow(string label, float value, string format = "F0", [System.Runtime.CompilerServices.CallerLineNumber] int field = 0)
         {
             GUILayout.BeginHorizontal();
-            string newText = GUILayout.TextField(value.ToString(format), _textField, GUILayout.Width(70));
+            string newText = PanelTextInput.Draw($"number:{field}:{_expandedCustomText}", value.ToString(format), _textField, GUILayout.Width(70));
             GUILayout.Label(label, _label);
             GUILayout.EndHorizontal();
             float parsed;
@@ -1068,10 +1125,10 @@ namespace HSRTimer
             return value;
         }
 
-        private string TextFieldRow(string label, string value, float width = 220f)
+        private string TextFieldRow(string label, string value, float width = 220f, [System.Runtime.CompilerServices.CallerLineNumber] int field = 0)
         {
             GUILayout.BeginHorizontal();
-            string newText = GUILayout.TextField(value, _textField, GUILayout.Width(width));
+            string newText = PanelTextInput.Draw($"text:{field}:{_expandedCustomText}", value, _textField, GUILayout.Width(width));
             GUILayout.Label(label, _label);
             GUILayout.EndHorizontal();
             return newText;
@@ -1093,7 +1150,7 @@ namespace HSRTimer
             GUILayout.BeginHorizontal();
             if (!_colorHexBuf.TryGetValue(key, out string buf))
                 buf = GradientText.ToHex(c);
-            string newText = GUILayout.TextField(buf, _textField, GUILayout.Width(90));
+            string newText = PanelTextInput.Draw($"color:{_tab}:{_expandedCustomText}:{key}", buf, _textField, GUILayout.Width(90));
             _colorHexBuf[key] = newText;
             // Typing drives the color only when the text parses.
             if (newText != buf && GradientText.TryParseColor(newText, out Color fromText))
@@ -1259,7 +1316,7 @@ namespace HSRTimer
                 {
                     GUILayout.BeginHorizontal();
                     GUILayout.Label(loc.Get("SETTINGS_PRESET_NEW_NAME"), _label);
-                    _presetNewName = GUILayout.TextField(_presetNewName, _textField, GUILayout.Width(160));
+                    _presetNewName = PanelTextInput.Draw("preset:name", _presetNewName, _textField, GUILayout.Width(160));
                     if (GUILayout.Button(loc.Get("SETTINGS_PRESET_CONFIRM"), _button, GUILayout.Width(80)))
                         ConfirmNewPreset(cfg);
                     if (GUILayout.Button(loc.Get("SETTINGS_PRESET_CANCEL"), _button, GUILayout.Width(80)))
