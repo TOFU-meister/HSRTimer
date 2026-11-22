@@ -17,8 +17,15 @@ namespace HSRTimer
     /// </summary>
     public class SettingsPanel : MonoBehaviour
     {
+#if STORE_IL2CPP
+        public SettingsPanel(System.IntPtr pointer) : base(pointer) { }
+#endif
+
         public static SettingsPanel Instance { get; private set; }
 
+#if STORE_IL2CPP
+        private GUI.WindowFunction _drawWindow;
+#endif
         private bool _visible;
 
         /// <summary>Whether the panel is currently shown on screen.</summary>
@@ -93,6 +100,9 @@ namespace HSRTimer
         private void Awake()
         {
             Instance = this;
+#if STORE_IL2CPP
+            _drawWindow = new System.Action<int>(Draw);
+#endif
         }
 
         private void Update()
@@ -199,7 +209,11 @@ namespace HSRTimer
         {
             if (!_visible) return;
             EnsureStyles();
-            _rect = GUI.Window(GetInstanceID(), _rect, Draw, "HSRTimer - " + PluginInfo.PLUGIN_VERSION);
+#if STORE_IL2CPP
+            _rect = GUI.Window(GetInstanceID(), _rect, _drawWindow, "HSRTimer - " + PluginInfo.RuntimeVersion);
+#else
+            _rect = GUI.Window(GetInstanceID(), _rect, Draw, "HSRTimer - " + PluginInfo.RuntimeVersion);
+#endif
         }
 
         private void Draw(int id)
@@ -296,7 +310,7 @@ namespace HSRTimer
             GUILayout.Space(6);
             // R12.2: top two lines = plugin name + version number.
             GUILayout.Label(PluginInfo.PLUGIN_NAME, _section);
-            GUILayout.Label(PluginInfo.PLUGIN_VERSION, _value);
+            GUILayout.Label(PluginInfo.RuntimeVersion, _value);
 
             // R12.3: next two lines = the first two non-empty lines of LICENSE
             // (MIT License / Copyright). Legal text, deliberately not localized.

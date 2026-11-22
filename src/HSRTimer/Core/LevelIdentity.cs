@@ -146,7 +146,11 @@ namespace HSRTimer
             {
                 case WorkshopItemSource.BuiltIn:
                 case WorkshopItemSource.EditorPick:
+#if STORE_IL2CPP
+                    var builtin = meta?.TryCast<BuiltinLevelMetadata>();
+#else
                     var builtin = meta as BuiltinLevelMetadata;
+#endif
                     string internalName = builtin != null && !string.IsNullOrEmpty(builtin.internalName)
                         ? builtin.internalName
                         : null;
@@ -201,7 +205,11 @@ namespace HSRTimer
                     {
                         if (item == null || item.workshopId != (ulong)levelNumber)
                             continue;
+#if STORE_IL2CPP
+                        var builtin = item?.TryCast<BuiltinLevelMetadata>();
+#else
                         var builtin = item as BuiltinLevelMetadata;
+#endif
                         if (builtin != null && !string.IsNullOrEmpty(builtin.internalName))
                             return builtin.internalName;
                     }

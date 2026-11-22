@@ -42,7 +42,11 @@ namespace HSRTimer
             string path = cfg != null && !string.IsNullOrEmpty(cfg.Settings.MarkersPath)
                 ? cfg.Settings.MarkersPath
                 : "markers";
+#if STORE_PREVIEW
+            return StoreDataPolicy.ResolvePreviewMarkerPath(PersistenceService.PluginDir, path);
+#else
             return SubsegmentFileStore.ResolvePath(path);
+#endif
         }
 
         /// <summary>
@@ -67,7 +71,7 @@ namespace HSRTimer
                 level_source = levelSource ?? "",
                 level_number = levelNumber,
                 category_key = categoryKey ?? "Any",
-                hsrtimer_version = PluginInfo.PLUGIN_VERSION,
+                hsrtimer_version = PluginInfo.RuntimeVersion,
                 updated_at = UtcNow(),
             };
             return set;
@@ -124,7 +128,7 @@ namespace HSRTimer
             try
             {
                 set.format_version = FormatVersion;
-                set.hsrtimer_version = PluginInfo.PLUGIN_VERSION;
+                set.hsrtimer_version = PluginInfo.RuntimeVersion;
                 set.updated_at = UtcNow();
                 Normalize(set);
                 string path = SetPath(set.level_id, set.category_key);

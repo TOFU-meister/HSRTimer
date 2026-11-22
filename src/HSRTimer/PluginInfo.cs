@@ -10,6 +10,12 @@ namespace HSRTimer
         public const string PLUGIN_GUID = "HSRTimer";
         public const string PLUGIN_NAME = "HSRTimer";
         public const string PLUGIN_VERSION = "0.0.0";
+#if STORE_IL2CPP
+        public const string StoreVersion = "0.0.0-store.preview.1";
+        internal const string RuntimeVersion = StoreVersion;
+#else
+        internal const string RuntimeVersion = PLUGIN_VERSION;
+#endif
 
         /// <summary>Project repository, opened by the About page's link button (R12.4).</summary>
         public const string PLUGIN_REPOSITORY_URL = "https://github.com/TwilightCup/HSRTimer";

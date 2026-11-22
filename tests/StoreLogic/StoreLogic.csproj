@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net6.0</TargetFramework>
+    <DefineConstants>$(DefineConstants);STORE_IL2CPP;STORE_PREVIEW</DefineConstants>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="../../src/HSRTimer/Core/GameClock.cs" />
+    <Compile Include="../../src/HSRTimer/Core/TimerCore.Boundaries.cs" />
+    <Compile Include="../../src/HSRTimer/Core/RunState.cs" />
+    <Compile Include="../../src/HSRTimer/Core/SegmentLogic.cs" />
+    <Compile Include="../../src/HSRTimer/Validation/InvalidReason.cs" />
+    <Compile Include="../../src/HSRTimer/Validation/ValidityFlags.cs" />
+    <Compile Include="../../src/HSRTimer/Subsegment/SubsegmentFileStore.cs" />
+    <Compile Include="../../src/HSRTimer/Subsegment/SubsegmentModels.cs" />
+    <Compile Include="../../src/HSRTimer/PluginInfo.cs" />
+    <Compile Include="../../src/HSRTimer/Store/StoreDataPolicy.cs" />
+  </ItemGroup>
+</Project>

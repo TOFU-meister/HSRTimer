@@ -50,7 +50,7 @@ namespace HSRTimer
                 case "time":
                     return System.DateTime.Now.ToString("HH:mm:ss", CultureInfo.InvariantCulture);
                 case "version":
-                    return PluginInfo.PLUGIN_VERSION;
+                    return PluginInfo.RuntimeVersion;
                 case "gametime":
                     return TimeFormatter.Format(gameTime);
                 case "realtime":

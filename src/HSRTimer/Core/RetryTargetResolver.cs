@@ -151,7 +151,11 @@ namespace HSRTimer
 
         private static bool MatchesName(WorkshopLevelMetadata metadata, string input)
         {
+#if STORE_IL2CPP
+            var builtin = metadata?.TryCast<BuiltinLevelMetadata>();
+#else
             var builtin = metadata as BuiltinLevelMetadata;
+#endif
             string internalName = builtin != null ? builtin.internalName : null;
 
             // The internal scene id is a useful fallback even when the HFF

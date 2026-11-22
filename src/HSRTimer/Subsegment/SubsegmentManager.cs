@@ -92,6 +92,10 @@ namespace HSRTimer
     /// </summary>
     public sealed class SubsegmentManager : MonoBehaviour
     {
+#if STORE_IL2CPP
+        public SubsegmentManager(System.IntPtr pointer) : base(pointer) { }
+#endif
+
         public static SubsegmentManager Instance { get; private set; }
 
         private SubsegmentOptions _options;
@@ -1148,6 +1152,10 @@ namespace HSRTimer
 
         private void WriteIlPb(string levelId, RunState state, long endTimeMs)
         {
+#if STORE_IL2CPP
+            if (!StoreDataPolicy.PbWritesEnabled)
+                return;
+#endif
             // A simulated test pass ('hsr pass') must not persist a PB.
             if (state != null && state.SuppressPbRecording)
                 return;
@@ -1197,6 +1205,10 @@ namespace HSRTimer
 
         private void WriteMultiPb(RunState state)
         {
+#if STORE_IL2CPP
+            if (!StoreDataPolicy.PbWritesEnabled)
+                return;
+#endif
             // A simulated test pass ('hsr pass') must not persist a PB.
             if (state != null && state.SuppressPbRecording)
                 return;

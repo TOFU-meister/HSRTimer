@@ -14,13 +14,13 @@ namespace HSRTimer
     [HarmonyPatch(typeof(SubtitleManager), nameof(SubtitleManager.PlayNarrative))]
     internal static class SubtitleManagerPlayNarrativePatch
     {
-        private static void Postfix(AudioClip clip)
+        private static void Postfix(AudioClip __0)
         {
             try
             {
                 var tracker = VoicelineTracker.Current;
                 if (tracker != null)
-                    tracker.MarkNarrativeClip(clip);
+                    tracker.MarkNarrativeClip(__0);
             }
             catch (System.Exception ex)
             {

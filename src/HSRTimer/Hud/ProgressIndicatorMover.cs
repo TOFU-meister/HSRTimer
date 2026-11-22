@@ -13,6 +13,10 @@ namespace HSRTimer
     /// </summary>
     public class ProgressIndicatorMover : MonoBehaviour
     {
+#if STORE_IL2CPP
+        public ProgressIndicatorMover(System.IntPtr pointer) : base(pointer) { }
+#endif
+
         private SubtitleManager _manager;
         private Transform _text;
         private Transform _ring;
@@ -134,7 +138,11 @@ namespace HSRTimer
         private static float CenterDelta(Transform text, Transform ring,
             Vector3 textOriginal, Vector3 ringOriginal)
         {
+#if STORE_IL2CPP
+            var parentRt = text.parent?.TryCast<RectTransform>();
+#else
             var parentRt = text.parent as RectTransform;
+#endif
             if (parentRt == null)
                 return 0f;
 
@@ -145,7 +153,11 @@ namespace HSRTimer
 
         private static Vector3 CenteredPosition(Transform tr, Vector3 original)
         {
+#if STORE_IL2CPP
+            var parentRt = tr.parent?.TryCast<RectTransform>();
+#else
             var parentRt = tr.parent as RectTransform;
+#endif
             if (parentRt == null)
                 return original;
 
@@ -160,7 +172,11 @@ namespace HSRTimer
         /// captured original layout, not from a possibly already-shifted value.</summary>
         private static float RectCenterX(Transform tr, Vector3 localPosition)
         {
+#if STORE_IL2CPP
+            var rt = tr.TryCast<RectTransform>();
+#else
             var rt = tr as RectTransform;
+#endif
             if (rt == null)
                 return localPosition.x;
             return localPosition.x + (0.5f - rt.pivot.x) * rt.rect.width;
@@ -168,10 +184,16 @@ namespace HSRTimer
 
         private static T GetField<T>(object target, string name) where T : class
         {
+#if STORE_IL2CPP
+            // Il2CppInterop exposes native fields as properties.
+            var property = target.GetType().GetProperty(name, BindingFlags.Public | BindingFlags.Instance);
+            return property?.GetValue(target) as T;
+#else
             var field = target.GetType().GetField(name, BindingFlags.Public | BindingFlags.Instance);
             if (field == null)
                 return null;
             return field.GetValue(target) as T;
+#endif
         }
     }
 }

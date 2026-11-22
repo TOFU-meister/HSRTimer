@@ -3,7 +3,11 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Text;
+#if STORE_IL2CPP
+using System.Text.Json;
+#else
 using UnityEngine;
+#endif
 
 namespace HSRTimer
 {
@@ -15,6 +19,13 @@ namespace HSRTimer
     public static class SubsegmentFileStore
     {
         public const int FormatVersion = 1;
+
+#if STORE_IL2CPP
+        // These models are managed .NET objects. Unity's native JsonUtility
+        // cannot serialize them in an IL2CPP player.
+        private static readonly JsonSerializerOptions Fields = new JsonSerializerOptions { IncludeFields = true, IgnoreReadOnlyProperties = true };
+        private static readonly JsonSerializerOptions IndentedFields = new JsonSerializerOptions(Fields) { WriteIndented = true };
+#endif
 
         public static string SanitizeId(string id)
         {
@@ -78,7 +89,11 @@ namespace HSRTimer
                 return false;
             try
             {
+#if STORE_IL2CPP
+                meta = JsonSerializer.Deserialize<SubsegmentMeta>(File.ReadAllText(path, Encoding.UTF8), Fields);
+#else
                 meta = JsonUtility.FromJson<SubsegmentMeta>(File.ReadAllText(path, Encoding.UTF8));
+#endif
                 if (meta == null || meta.format_version != FormatVersion)
                 {
                     Plugin.Logger.LogWarning($"HSRTimer: subsegment meta '{path}' missing or unsupported format_version; skipped.");
@@ -114,10 +129,14 @@ namespace HSRTimer
                 level_ids = levelIds,
                 total_ms = totalMs,
                 sample_count = sampleCount,
-                hsrtimer_version = PluginInfo.PLUGIN_VERSION,
+                hsrtimer_version = PluginInfo.RuntimeVersion,
                 created_at = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ", CultureInfo.InvariantCulture),
             };
+#if STORE_IL2CPP
+            return JsonSerializer.Serialize(meta, IndentedFields);
+#else
             return JsonUtility.ToJson(meta, true);
+#endif
         }
 
         public static string MakeSampleJson(IEnumerable<SubsegmentSample> samples)
@@ -126,7 +145,11 @@ namespace HSRTimer
             foreach (var s in samples)
             {
                 if (sb.Length > 0) sb.Append('\n');
+#if STORE_IL2CPP
+                sb.Append(JsonSerializer.Serialize(s, Fields));
+#else
                 sb.Append(JsonUtility.ToJson(s));
+#endif
             }
             sb.Append('\n');
             return sb.ToString();
@@ -150,7 +173,11 @@ namespace HSRTimer
                     if (line.Length == 0) continue;
                     try
                     {
+#if STORE_IL2CPP
+                        var sample = JsonSerializer.Deserialize<SubsegmentSample>(line, Fields);
+#else
                         var sample = JsonUtility.FromJson<SubsegmentSample>(line);
+#endif
                         if (sample != null)
                             samples.Add(sample);
                     }

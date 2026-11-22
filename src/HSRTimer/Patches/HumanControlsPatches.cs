@@ -43,7 +43,11 @@ namespace HSRTimer
                     return;
                 // Local player only — never police remote replicas.
                 var human = Human.Localplayer;
+#if STORE_IL2CPP
+                if (human == null || human.controls?.Pointer != __instance.Pointer)
+#else
                 if (human == null || human.controls != __instance)
+#endif
                     return;
                 var cfg = ConfigService.Instance;
                 if (cfg == null || !cfg.EnabledTags.HasTag(TagIds.Jumpless))

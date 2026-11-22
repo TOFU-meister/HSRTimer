@@ -64,7 +64,11 @@ namespace HSRTimer
                     if (item == null)
                         continue;
                     string key = LevelIdentity.MetadataLevelKey(source, (int)item.workshopId, item);
+#if STORE_IL2CPP
+                    var builtin = item?.TryCast<BuiltinLevelMetadata>();
+#else
                     var builtin = item as BuiltinLevelMetadata;
+#endif
                     string display = string.IsNullOrEmpty(item.title)
                         ? (item.workshopId != 0UL ? item.workshopId.ToString() : (builtin != null ? builtin.internalName : ""))
                         : item.title;

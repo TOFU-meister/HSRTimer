@@ -61,7 +61,11 @@ namespace HSRTimer
     /// player into <c>Spawning</c>, so it marks that state as already seen by
     /// the polling respawn detector.
     /// </summary>
+#if STORE_IL2CPP
+    [HarmonyPatch(typeof(PauseMenu), "ReloadLevelClick")]
+#else
     [HarmonyPatch(typeof(PauseMenu), nameof(PauseMenu.LoadClick))]
+#endif
     internal static class PauseMenuLoadPatch
     {
         private static void Postfix()

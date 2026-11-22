@@ -31,6 +31,10 @@ namespace HSRTimer
     /// </summary>
     public sealed class MarkersManager : MonoBehaviour
     {
+#if STORE_IL2CPP
+        public MarkersManager(System.IntPtr pointer) : base(pointer) { }
+#endif
+
         public static MarkersManager Instance { get; private set; }
 
         /// <summary>
@@ -60,7 +64,11 @@ namespace HSRTimer
         /// single-player; in co-op only the host writes — a co-op client never
         /// does.
         /// </summary>
-        public bool IsPbWriteEnabled => !(PbClientOverride ?? NetGame.isClient);
+        public bool IsPbWriteEnabled =>
+#if STORE_IL2CPP
+            StoreDataPolicy.PbWritesEnabled &&
+#endif
+            !(PbClientOverride ?? NetGame.isClient);
 
         // ── level context (current level being played) ──
         private string _currentLevelKey;

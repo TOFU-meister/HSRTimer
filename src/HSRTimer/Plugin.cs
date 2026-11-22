@@ -1,6 +1,9 @@
 using BepInEx;
 using BepInEx.Logging;
 using UnityEngine;
+#if STORE_IL2CPP
+using BepInEx.Unity.IL2CPP;
+#endif
 
 namespace HSRTimer
 {
@@ -11,8 +14,25 @@ namespace HSRTimer
     /// singletons. Declares LevelCollections as a soft dependency so the plugin
     /// loads and runs fine without it.
     /// </summary>
+#if STORE_IL2CPP
+    [BepInPlugin(PluginInfo.PLUGIN_GUID, "HSRTimer Microsoft Store", PluginInfo.StoreVersion)]
+#else
     [BepInPlugin(PluginInfo.PLUGIN_GUID, PluginInfo.PLUGIN_NAME, PluginInfo.PLUGIN_VERSION)]
+#endif
     [BepInDependency("LevelCollections", BepInEx.BepInDependency.DependencyFlags.SoftDependency)]
+#if STORE_IL2CPP
+    public class Plugin : BasePlugin
+    {
+        internal static ManualLogSource Logger;
+        private string PluginLocation => typeof(Plugin).Assembly.Location;
+
+        public override void Load()
+        {
+            Logger = Log;
+            StoreRuntime.InitialiseComponents();
+            Initialise();
+        }
+#else
     public class Plugin : BaseUnityPlugin
     {
         internal static new ManualLogSource Logger;
@@ -20,18 +40,30 @@ namespace HSRTimer
         private void Awake()
         {
             Logger = base.Logger;
-            Logger.LogInfo($"Plugin {PluginInfo.PLUGIN_GUID} v{PluginInfo.PLUGIN_VERSION} is loaded!");
+            Initialise();
+        }
+
+        private string PluginLocation => Info.Location;
+#endif
+
+        private void Initialise()
+        {
+            Logger.LogInfo($"Plugin {PluginInfo.PLUGIN_GUID} v{PluginInfo.RuntimeVersion} is loaded!");
 
             // 0. Updater housekeeping (R13.6): clear leftovers from a previous
             //    session's plugin update (deferred deletions, interrupted-download
             //    temps, retired ".dis" copies) and warn if the loaded copy is not
             //    the newest one on disk (a stale plugin may have won the load).
-            string pluginDir = System.IO.Path.GetDirectoryName(Info.Location) ?? "";
+#if STORE_IL2CPP
+            Logger.LogInfo($"Store data directory: {PersistenceService.PluginDir}; PB writes: {StoreDataPolicy.PbWritesEnabled}");
+#endif
+            string pluginDir = System.IO.Path.GetDirectoryName(PluginLocation) ?? "";
+#if !STORE_IL2CPP
             try
             {
                 UpdateInstaller.CleanupStartup(pluginDir);
                 string newest = UpdateInstaller.FindNewestVersionedDll(pluginDir);
-                string currentName = System.IO.Path.GetFileName(Info.Location);
+                string currentName = System.IO.Path.GetFileName(PluginLocation);
                 if (newest != null
                     && !string.Equals(newest, currentName, System.StringComparison.OrdinalIgnoreCase))
                 {
@@ -42,6 +74,7 @@ namespace HSRTimer
             {
                 Logger.LogWarning($"HSRTimer: startup plugin cleanup failed: {ex.Message}");
             }
+#endif
 
             // 1. Config + localization. Seed the runtime lang dir first (so any
             //    on-disk defaults are picked up by the scan), then load. Note:
@@ -98,6 +131,18 @@ namespace HSRTimer
             SettingsPanelTabRegistry.Instance.NotifyLanguageChanged(config.Localization.CurrentCode);
 
             // 5. Engine + HUD + settings-panel singletons, persistent across scene loads.
+#if STORE_IL2CPP
+            AddComponent<TimerCore>();
+            AddComponent<TimerHud>();
+            AddComponent<ProgressIndicatorMover>();
+            AddComponent<SettingsPanel>();
+            var updater = AddComponent<UpdaterService>();
+            updater.Init(pluginDir, PluginInfo.RuntimeVersion);
+            AddComponent<SubsegmentManager>();
+            AddComponent<LeaderboardHud>();
+            AddComponent<MarkersManager>();
+            AddComponent<MarkerOverlay>();
+#else
             var engineGo = new GameObject("HSRTimer.Core");
             Object.DontDestroyOnLoad(engineGo);
             engineGo.AddComponent<TimerCore>();
@@ -116,7 +161,7 @@ namespace HSRTimer
             var updaterGo = new GameObject("HSRTimer.Updater");
             Object.DontDestroyOnLoad(updaterGo);
             var updater = updaterGo.AddComponent<UpdaterService>();
-            updater.Init(pluginDir, PluginInfo.PLUGIN_VERSION);
+            updater.Init(pluginDir, PluginInfo.RuntimeVersion);
 
             // 6. Subsegment module (R8): recorder/loader/comparator + leaderboard HUD.
             var subGo = new GameObject("HSRTimer.Subsegment");
@@ -129,6 +174,7 @@ namespace HSRTimer
             Object.DontDestroyOnLoad(markersGo);
             markersGo.AddComponent<MarkersManager>();
             markersGo.AddComponent<MarkerOverlay>();
+#endif
 
             // 8. In-game dev console: register the "hsr ..." commands with the
             //     game's Shell console (~ / F1) so every feature can be inspected
@@ -163,7 +209,7 @@ namespace HSRTimer
             // Defaults live next to the built DLL (csproj CopyToOutputDirectory).
             string src = System.IO.Path.Combine(BepInEx.Paths.PluginPath, PluginInfo.PLUGIN_GUID, "lang", name);
             if (!System.IO.File.Exists(src))
-                src = System.IO.Path.Combine(System.IO.Path.GetDirectoryName(Info.Location) ?? "", "lang", name);
+                src = System.IO.Path.Combine(System.IO.Path.GetDirectoryName(PluginLocation) ?? "", "lang", name);
             if (!System.IO.File.Exists(src)) return;
             try { System.IO.File.Copy(src, dst, overwrite: false); }
             catch (System.Exception ex) { Logger.LogWarning($"HSRTimer: copy {name} failed: {ex.Message}"); }

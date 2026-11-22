@@ -43,7 +43,11 @@ namespace HSRTimer
     public static class PersistenceService
     {
         /// <summary>The plugin's runtime directory under the BepInEx config root.</summary>
+#if STORE_IL2CPP
+        public static string PluginDir => System.IO.Path.Combine(Paths.ConfigPath, StoreDataPolicy.DataDirectory);
+#else
         public static string PluginDir => System.IO.Path.Combine(Paths.ConfigPath, PluginInfo.PLUGIN_GUID);
+#endif
 
         public static string LangDir => System.IO.Path.Combine(PluginDir, "lang");
 

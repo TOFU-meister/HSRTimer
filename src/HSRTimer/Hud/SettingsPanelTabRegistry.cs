@@ -1,6 +1,9 @@
 using System;
 using System.Collections.Generic;
 using BepInEx;
+#if STORE_IL2CPP
+using BepInEx.Unity.IL2CPP;
+#endif
 
 namespace HSRTimer
 {
@@ -119,9 +122,16 @@ namespace HSRTimer
 
         /// <summary>
         /// Convenience overload that derives the plugin GUID from a
-        /// <see cref="BaseUnityPlugin"/> instance. In <c>Awake</c> pass
+        /// BepInEx plugin instance. During plugin startup pass
         /// <c>this</c>.
         /// </summary>
+#if STORE_IL2CPP
+        public bool Register(BasePlugin owner, ISettingsPanelTab tab)
+        {
+            var plugin = owner == null ? null : Attribute.GetCustomAttribute(owner.GetType(), typeof(BepInPlugin)) as BepInPlugin;
+            return Register(plugin?.GUID, tab);
+        }
+#else
         public bool Register(BaseUnityPlugin owner, ISettingsPanelTab tab)
         {
             string guid = owner != null && owner.Info != null && owner.Info.Metadata != null
@@ -129,6 +139,7 @@ namespace HSRTimer
                 : null;
             return Register(guid, tab);
         }
+#endif
 
         /// <summary>
         /// Push the given HSRTimer language code to every registered tab that

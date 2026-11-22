@@ -22,6 +22,10 @@ namespace HSRTimer
     /// </summary>
     public sealed class MarkerOverlay : MonoBehaviour
     {
+#if STORE_IL2CPP
+        public MarkerOverlay(System.IntPtr pointer) : base(pointer) { }
+#endif
+
         private Mesh _cubeMesh;
         private Material _cubeMaterial;
         private bool _shaderLookupDone;

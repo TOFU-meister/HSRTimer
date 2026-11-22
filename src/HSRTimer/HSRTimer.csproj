@@ -15,8 +15,34 @@
     <EnableDefaultEmbeddedResourceItems>false</EnableDefaultEmbeddedResourceItems>
   </PropertyGroup>
 
+  <PropertyGroup Condition="'$(StoreIl2Cpp)' == 'true'">
+    <TargetFramework>net6.0</TargetFramework>
+    <PlatformTarget>x64</PlatformTarget>
+    <NoStdLib>false</NoStdLib>
+    <DisableImplicitFrameworkReferences>false</DisableImplicitFrameworkReferences>
+    <DefineConstants>$(DefineConstants);STORE_IL2CPP</DefineConstants>
+    <Version>0.0.0-store.preview.1</Version>
+    <StorePreview Condition="'$(StorePreview)' == ''">true</StorePreview>
+    <DefineConstants Condition="'$(StorePreview)' == 'true'">$(DefineConstants);STORE_PREVIEW</DefineConstants>
+    <OutputPath>bin/store/$(Configuration)/</OutputPath>
+  </PropertyGroup>
+
+  <ItemGroup Condition="'$(StoreIl2Cpp)' == 'true'">
+    <None Include="../../LICENSE" Link="LICENSE" CopyToOutputDirectory="PreserveNewest" />
+    <StoreCore Include="BepInEx.Core;BepInEx.Unity.IL2CPP;Il2CppInterop.Runtime;0Harmony" />
+    <StoreInterop Include="Il2Cppmscorlib;Assembly-CSharp;HumanAPI;UnityEngine.CoreModule;UnityEngine.IMGUIModule;UnityEngine.TextRenderingModule;UnityEngine.AudioModule;UnityEngine.PhysicsModule;UnityEngine.InputLegacyModule;UnityEngine.UnityWebRequestModule;UnityEngine.UI" />
+    <Reference Include="@(StoreCore->'$(BepInExDir)/core/%(Identity).dll')" Private="false" />
+    <Reference Include="@(StoreInterop->'$(BepInExDir)/interop/%(Identity).dll')" Private="false" />
+  </ItemGroup>
+
+  <Target Name="CheckStoreReferences" BeforeTargets="ResolveAssemblyReferences" Condition="'$(StoreIl2Cpp)' == 'true'">
+    <Error Condition="'$(BepInExDir)' == ''" Text="Set BepInExDir to the Microsoft Store game's BepInEx folder (containing core and generated interop)." />
+    <Error Condition="!Exists('$(BepInExDir)/core/%(StoreCore.Identity).dll')" Text="Missing core/%(StoreCore.Identity).dll in $(BepInExDir)." />
+    <Error Condition="!Exists('$(BepInExDir)/interop/%(StoreInterop.Identity).dll')" Text="Missing generated interop/%(StoreInterop.Identity).dll in $(BepInExDir)." />
+  </Target>
+
   <!-- Base class libraries from Unity Mono (net35-equivalent) -->
-  <ItemGroup>
+  <ItemGroup Condition="'$(StoreIl2Cpp)' != 'true'">
     <Reference Include="mscorlib">
       <HintPath>$(GAME_MANAGED)/mscorlib.dll</HintPath>
       <Private>false</Private>
@@ -36,7 +62,7 @@
   </ItemGroup>
 
   <!-- BepInEx & Harmony -->
-  <ItemGroup>
+  <ItemGroup Condition="'$(StoreIl2Cpp)' != 'true'">
     <Reference Include="BepInEx">
       <HintPath>$(BEPINEX_CORE)/BepInEx.dll</HintPath>
       <Private>false</Private>
@@ -52,7 +78,7 @@
   </ItemGroup>
 
   <!-- Game assemblies -->
-  <ItemGroup>
+  <ItemGroup Condition="'$(StoreIl2Cpp)' != 'true'">
     <Reference Include="Assembly-CSharp">
       <HintPath>$(GAME_MANAGED)/Assembly-CSharp.dll</HintPath>
       <Private>false</Private>
@@ -64,7 +90,7 @@
   </ItemGroup>
 
   <!-- Unity engine modules (only what HSRTimer uses) -->
-  <ItemGroup>
+  <ItemGroup Condition="'$(StoreIl2Cpp)' != 'true'">
     <Reference Include="UnityEngine">
       <HintPath>$(GAME_MANAGED)/UnityEngine.dll</HintPath>
       <Private>false</Private>
@@ -120,7 +146,7 @@
 
   <!-- Keep the assembly identity as HSRTimer for external plugin
        compatibility, but also emit a versioned filename for releases. -->
-  <Target Name="CopyVersionedDll" AfterTargets="Build">
+  <Target Name="CopyVersionedDll" AfterTargets="Build" Condition="'$(StoreIl2Cpp)' != 'true'">
     <Copy SourceFiles="$(TargetPath)" DestinationFiles="$(TargetDir)HSRTimer-v$(Version).dll" />
     <Copy SourceFiles="$(TargetDir)$(TargetName).pdb" DestinationFiles="$(TargetDir)HSRTimer-v$(Version).pdb" Condition="Exists('$(TargetDir)$(TargetName).pdb')" />
   </Target>

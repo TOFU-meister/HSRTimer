@@ -1,3 +1,6 @@
+#if STORE_IL2CPP
+using BepInEx.Unity.IL2CPP.Utils;
+#endif
 using System;
 using System.Collections.Generic;
 using System.Globalization;
@@ -63,8 +66,14 @@ namespace HSRTimer
                 // The game's Shell uses a static CommandRegistry, so commands can
                 // be registered before Shell.instance exists (Shell.Awake only
                 // adds the built-in help commands; it never clears the registry).
+#if STORE_IL2CPP
+                Il2CppSystem.Action<string> command = new Action<string>(OnCommand);
+                Shell.RegisterCommand(Prefix, command, HelpFor(Prefix));
+                Shell.RegisterCommand("hsrtimer", command, HelpFor("hsrtimer"));
+#else
                 Shell.RegisterCommand(Prefix, new Action<string>(OnCommand), HelpFor(Prefix));
                 Shell.RegisterCommand("hsrtimer", new Action<string>(OnCommand), HelpFor("hsrtimer"));
+#endif
                 Plugin.Logger.LogInfo("HSRTimer: dev-console commands registered (type 'hsr help' with ~/F1).");
             }
             catch (Exception ex)
@@ -159,7 +168,7 @@ namespace HSRTimer
             var loc = cfg.Localization;
 
             var sb = new StringBuilder();
-            sb.AppendLine($"HSRTimer v{PluginInfo.PLUGIN_VERSION} | lang={loc.CurrentCode} | preset={s.CurrentPreset}");
+            sb.AppendLine($"HSRTimer v{PluginInfo.RuntimeVersion} | lang={loc.CurrentCode} | preset={s.CurrentPreset}");
             sb.AppendLine($"game={(game != null ? game.state.ToString() : "null")} app={App.state} local={NetGame.isLocal} server={NetGame.isServer} client={NetGame.isClient}");
 
             if (state != null)
@@ -662,7 +671,11 @@ namespace HSRTimer
             // Step 3: dispatch the real completion flow — BuiltIn campaign goes
             // through PassLevel → StartNextLevel, Workshop/EditorPick through
             // PauseLeave. The engine records the segment on the state flip.
+#if STORE_IL2CPP
+            game.Fall(human, false);
+#else
             game.Fall(human);
+#endif
             Print("Simulated pass dispatched: Game.Fall called with passedLevel set; subsegment/marker PBs suppressed; run 'hsr status' to verify the recorded segment/run.");
         }
 
@@ -771,7 +784,7 @@ namespace HSRTimer
         private static void CmdAbout()
         {
             var sb = new StringBuilder();
-            sb.AppendLine(PluginInfo.PLUGIN_NAME + " " + PluginInfo.PLUGIN_VERSION);
+            sb.AppendLine(PluginInfo.PLUGIN_NAME + " " + PluginInfo.RuntimeVersion);
             sb.AppendLine(PluginInfo.LICENSE_LINE1);
             sb.AppendLine(PluginInfo.LICENSE_LINE2);
             sb.AppendLine(PluginInfo.PLUGIN_REPOSITORY_URL);
@@ -1674,7 +1687,7 @@ namespace HSRTimer
                 {
                     bool net = NetGame.isClient;
                     bool effective = MarkersManager.PbClientOverride ?? net;
-                    Print($"marker PB gate: role={(effective ? "client" : "host/single")} pbWrite={(effective ? "disabled" : "enabled")} net={(net ? "client" : "host/single")} override={(MarkersManager.PbClientOverride.HasValue ? (MarkersManager.PbClientOverride.Value ? "client" : "host/single") : "auto")}");
+                    Print($"marker PB gate: role={(effective ? "client" : "host/single")} pbWrite={(mgr.IsPbWriteEnabled ? "enabled" : "disabled")} net={(net ? "client" : "host/single")} override={(MarkersManager.PbClientOverride.HasValue ? (MarkersManager.PbClientOverride.Value ? "client" : "host/single") : "auto")}");
                     return;
                 }
                 case "on":
@@ -1690,7 +1703,7 @@ namespace HSRTimer
                     Print("Usage: hsr marker clientmode <status|on|off|auto>");
                     return;
             }
-            Print($"marker PB gate override = {(MarkersManager.PbClientOverride.HasValue ? (MarkersManager.PbClientOverride.Value ? "client (PB writes disabled)" : "host/single (PB writes enabled)") : "auto")}.");
+            Print($"marker PB gate override = {(MarkersManager.PbClientOverride.HasValue ? (MarkersManager.PbClientOverride.Value ? "client" : "host/single") : "auto")}; PB writes {(mgr.IsPbWriteEnabled ? "enabled" : "disabled")}.");
         }
 
         /// <summary>
@@ -1927,6 +1940,13 @@ namespace HSRTimer
 
         private static void CmdMarkerSetPb(MarkersManager mgr, string msText)
         {
+#if STORE_IL2CPP
+            if (!StoreDataPolicy.PbWritesEnabled)
+            {
+                Print("Marker PB writes are disabled in the Microsoft Store preview.");
+                return;
+            }
+#endif
             if (mgr != null && !mgr.IsPbWriteEnabled)
             {
                 Print("Marker PB writes are disabled on a co-op client (host-only, R10.10.2); use 'hsr marker clientmode off' to force for testing.");
@@ -1948,6 +1968,13 @@ namespace HSRTimer
 
         private static void CmdMarkerClearPb(MarkersManager mgr)
         {
+#if STORE_IL2CPP
+            if (!StoreDataPolicy.PbWritesEnabled)
+            {
+                Print("Marker PB writes are disabled in the Microsoft Store preview.");
+                return;
+            }
+#endif
             var set = CurrentMarkerSet();
             if (set == null) { Print("No active marker set."); return; }
             set.pb = null;

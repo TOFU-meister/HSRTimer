@@ -20,13 +20,52 @@ namespace HSRTimer
             try
             {
                 var harmony = new Harmony(InstanceId);
+#if STORE_IL2CPP
+                // Optional hooks can differ between game builds. Never let a
+                // tag or menu hook prevent the timing hooks from installing.
+                if (!ApplyStorePatch(harmony, typeof(GameAfterLoadBoundaryPatch)) ||
+                    !ApplyStorePatch(harmony, typeof(GameFallBoundaryPatch)))
+                {
+                    harmony.UnpatchSelf();
+                    throw new System.InvalidOperationException("Required Store timing hooks could not be installed.");
+                }
+                ApplyStorePatch(harmony, typeof(GameEnterPassZoneBoundaryPatch));
+                ApplyStorePatch(harmony, typeof(PauseMenuRestartPatch));
+                ApplyStorePatch(harmony, typeof(PauseMenuLoadPatch));
+                ApplyStorePatch(harmony, typeof(HumanControlsHandleInputPatch));
+                ApplyStorePatch(harmony, typeof(NarrativeBlockPlayPatch));
+                ApplyStorePatch(harmony, typeof(SubtitleManagerPlayNarrativePatch));
+#else
                 harmony.PatchAll(typeof(PatchModule).Assembly);
+#endif
                 Plugin.Logger.LogInfo("HSRTimer: Harmony patches applied.");
             }
             catch (System.Exception ex)
             {
                 Plugin.Logger.LogError($"HSRTimer: failed to apply Harmony patches: {ex}");
+#if STORE_IL2CPP
+                throw;
+#endif
             }
         }
+
+#if STORE_IL2CPP
+        private static bool ApplyStorePatch(Harmony harmony, System.Type patch)
+        {
+            try
+            {
+                var methods = harmony.CreateClassProcessor(patch).Patch();
+                if (methods == null || methods.Count == 0)
+                    throw new System.InvalidOperationException("No patch method was installed.");
+                Plugin.Logger.LogInfo($"HSRTimer: installed {patch.Name}.");
+                return true;
+            }
+            catch (System.Exception ex)
+            {
+                Plugin.Logger.LogWarning($"HSRTimer: {patch.Name} unavailable: {ex}");
+                return false;
+            }
+        }
+#endif
     }
 }

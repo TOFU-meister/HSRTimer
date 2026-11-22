@@ -1,3 +1,7 @@
+#if STORE_IL2CPP
+using BepInEx.Unity.IL2CPP.Utils;
+using System.Linq;
+#endif
 using System;
 using System.Collections;
 using System.IO;
@@ -45,6 +49,10 @@ namespace HSRTimer
     /// </summary>
     public class UpdaterService : MonoBehaviour
     {
+#if STORE_IL2CPP
+        public UpdaterService(System.IntPtr pointer) : base(pointer) { }
+#endif
+
         public static UpdaterService Instance { get; private set; }
 
         // ── public state (read by the panel every frame / console on demand) ──
@@ -115,7 +123,7 @@ namespace HSRTimer
         public void Init(string pluginDir, string currentVersion)
         {
             _pluginDir = pluginDir;
-            _currentVersion = currentVersion ?? PluginInfo.PLUGIN_VERSION;
+            _currentVersion = currentVersion ?? PluginInfo.RuntimeVersion;
             Log($"updater ready (feed: {FeedUrl})");
         }
 
@@ -163,13 +171,20 @@ namespace HSRTimer
                 Log("update check ignored: another operation is in progress");
                 return;
             }
-            StartCoroutine(CheckRoutine());
+            this.StartCoroutine(CheckRoutine());
         }
 
         /// <summary>Download and install <see cref="PendingRelease"/>. No-op while
         /// busy or when no update is pending.</summary>
         public void ApplyUpdate()
         {
+#if STORE_IL2CPP
+            // Upstream release assets are for Unity Mono. Enable installation
+            // once this port has its own Store release feed and asset format.
+            ErrorFromCheck = false;
+            ErrorText = "Automatic installation requires a Microsoft Store IL2CPP release feed.";
+            LogWarn(ErrorText);
+#else
             if (IsBusy)
             {
                 Log("update apply ignored: another operation is in progress");
@@ -181,6 +196,7 @@ namespace HSRTimer
                 return;
             }
             StartCoroutine(ApplyRoutine());
+#endif
         }
 
         /// <summary>Abort any in-flight network request (test hook; also on destroy).</summary>
@@ -257,7 +273,11 @@ namespace HSRTimer
                 }
                 else
                 {
+#if STORE_IL2CPP
+                    outcome.Data = req.downloadHandler != null ? req.downloadHandler.data?.ToArray() : null;
+#else
                     outcome.Data = req.downloadHandler != null ? req.downloadHandler.data : null;
+#endif
                     outcome.Text = req.downloadHandler != null ? req.downloadHandler.text : null;
                 }
             }

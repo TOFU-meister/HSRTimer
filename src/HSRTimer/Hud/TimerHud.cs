@@ -15,6 +15,10 @@ namespace HSRTimer
     /// </summary>
     public class TimerHud : MonoBehaviour
     {
+#if STORE_IL2CPP
+        public TimerHud(System.IntPtr pointer) : base(pointer) { }
+#endif
+
         private const float MarkerAxisIndicatorHeight = 38f;
 
         /// <summary>How long a soft flag stays red after a new trigger.</summary>

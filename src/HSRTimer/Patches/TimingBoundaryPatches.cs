@@ -1,5 +1,8 @@
 using HarmonyLib;
 using Multiplayer;
+#if STORE_IL2CPP
+using HumanAPI;
+#endif
 
 namespace HSRTimer
 {
@@ -11,7 +14,7 @@ namespace HSRTimer
     /// state (TB-3). The record is consumed by <see cref="TimerCore"/> on the
     /// next physics step.
     /// </summary>
-    [HarmonyPatch(typeof(Game), nameof(Game.AfterLoad))]
+    [HarmonyPatch(typeof(Game), nameof(Game.AfterLoad), typeof(int), typeof(int))]
     internal static class GameAfterLoadBoundaryPatch
     {
         private static void Postfix()
@@ -35,7 +38,7 @@ namespace HSRTimer
     /// recorded by the authoritative boundary hook
     /// <see cref="GameFallBoundaryPatch"/>.
     /// </summary>
-    [HarmonyPatch(typeof(Game), nameof(Game.EnterPassZone))]
+    [HarmonyPatch(typeof(Game), nameof(Game.EnterPassZone), new System.Type[0])]
     internal static class GameEnterPassZoneBoundaryPatch
     {
         private static void Postfix(Game __instance)
@@ -53,7 +56,7 @@ namespace HSRTimer
     }
 
     /// <summary>
-    /// Harmony prefix/postfix on <c>Game.Fall(HumanBase, bool, bool)</c>: the
+    /// Harmony prefix/postfix on <c>Game.Fall</c>: the
     /// point where the game detects a genuine level completion (R1.4.2). The
     /// prefix snapshots whether this call took the pass branch (the method
     /// itself may clear <c>passedLevel</c> for Workshop/EditorPick before
@@ -63,7 +66,11 @@ namespace HSRTimer
     /// in ARCHITECTURE.md: the pass is evaluated inside the game's physics
     /// step, so a later poll can only observe it one or more ticks late.
     /// </summary>
+#if STORE_IL2CPP
+    [HarmonyPatch(typeof(Game), nameof(Game.Fall), typeof(HumanBase), typeof(bool))]
+#else
     [HarmonyPatch(typeof(Game), nameof(Game.Fall))]
+#endif
     internal static class GameFallBoundaryPatch
     {
         private static void Prefix(Game __instance, out bool __state)

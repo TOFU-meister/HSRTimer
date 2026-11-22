@@ -178,8 +178,12 @@ namespace HSRTimer
                 return false;
             }
 
+#if STORE_PREVIEW
+            Plugin.Logger.LogInfo("HSRTimer[presets]: marker snapshots include PB data; restored layout only in the Store preview.");
+#else
             if (!RestoreMarkersFrom(presetDir))
                 Plugin.Logger.LogWarning($"HSRTimer[presets]: failed to restore markers from preset '{cfg.Settings.CurrentPreset}'.");
+#endif
 
             // Refresh in-memory layout from the newly written live file.
             cfg.Layout.Load();
@@ -246,11 +250,13 @@ namespace HSRTimer
                 Plugin.Logger.LogWarning($"HSRTimer[presets]: failed to write layout.ini into preset '{name}': {ex.Message}");
             }
 
+#if !STORE_PREVIEW
             // Flush any in-memory marker edits before snapshotting the markers dir.
             var mgr = MarkersManager.Instance;
             if (mgr != null)
                 mgr.SaveAllDirty();
             CopyMarkersTo(Path.Combine(dir, "markers"));
+#endif
         }
 
         private static void CopyMarkersTo(string destDir)

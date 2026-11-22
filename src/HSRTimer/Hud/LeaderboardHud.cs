@@ -21,6 +21,10 @@ namespace HSRTimer
     /// </summary>
     public sealed class LeaderboardHud : MonoBehaviour
     {
+#if STORE_IL2CPP
+        public LeaderboardHud(System.IntPtr pointer) : base(pointer) { }
+#endif
+
         public static LeaderboardHud Instance { get; private set; }
 
         private bool _visible = true;

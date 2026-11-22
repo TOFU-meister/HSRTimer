@@ -8,7 +8,8 @@
   -->
   <Import Project="Directory.Build.user.props" Condition="Exists('Directory.Build.user.props')" />
 
-  <Target Name="CheckReferencePaths" BeforeTargets="ResolveAssemblyReferences">
+  <Target Name="CheckReferencePaths" BeforeTargets="ResolveAssemblyReferences"
+          Condition="'$(MSBuildProjectName)' == 'HSRTimer' and '$(StoreIl2Cpp)' != 'true'">
     <Error Condition=" '$(GAME_MANAGED)' == '' or '$(BEPINEX_CORE)' == '' "
            Text="GAME_MANAGED and BEPINEX_CORE must be set. Create Directory.Build.user.props (see .gitignore) or export them before building." />
   </Target>

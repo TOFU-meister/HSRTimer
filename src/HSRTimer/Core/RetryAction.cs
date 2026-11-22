@@ -1,3 +1,6 @@
+#if STORE_IL2CPP
+using BepInEx.Unity.IL2CPP.Utils;
+#endif
 using System.Collections;
 using Multiplayer;
 using UnityEngine;
