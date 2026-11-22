@@ -164,21 +164,9 @@ namespace HSRTimer
         private void EnsureFont(int size)
         {
             if (size <= 0) size = 16;
-            if (_font != null && _appliedFontSize == size) return;
-            try
-            {
-                _font = Font.CreateDynamicFontFromOSFont(new[]
-                {
-                    "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC",
-                    "Noto Sans CJK", "Heiti SC", "Arial Unicode MS", "Arial",
-                }, size);
-                _appliedFontSize = size;
-            }
-            catch (System.Exception ex)
-            {
-                Plugin.Logger.LogWarning($"HSRTimer: leaderboard dynamic font creation failed: {ex.Message}");
-                _font = null;
-            }
+            if (_appliedFontSize == size) return;
+            _appliedFontSize = size;
+            _font = HudFont.Create(size);
         }
 
         private void OnGUI()

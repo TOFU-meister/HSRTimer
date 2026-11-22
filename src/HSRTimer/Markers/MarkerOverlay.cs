@@ -551,22 +551,10 @@ namespace HSRTimer
 
         private void EnsureLabelFont(int size)
         {
-            if (_labelFont != null && _labelFontSize == size) return;
-            try
-            {
-                _labelFont = Font.CreateDynamicFontFromOSFont(new[]
-                {
-                    "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC",
-                    "Noto Sans CJK", "Heiti SC", "Arial Unicode MS", "Arial",
-                }, size);
-                _labelFontSize = size;
-                _labelStyle.font = _labelFont;
-            }
-            catch (System.Exception ex)
-            {
-                Plugin.Logger.LogWarning($"HSRTimer[markers]: overlay font creation failed: {ex.Message}");
-                _labelFont = null;
-            }
+            if (_labelFontSize == size) return;
+            _labelFontSize = size;
+            _labelFont = HudFont.Create(size);
+            _labelStyle.font = _labelFont;
         }
 
         private static Mesh BuildUnitCube()

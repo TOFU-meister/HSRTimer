@@ -25,6 +25,8 @@ namespace HSRTimer
 
 #if STORE_IL2CPP
         private GUI.WindowFunction _drawWindow;
+        private bool _drawFailed;
+        private bool _drawWarningLogged;
 #endif
         private bool _visible;
 
@@ -101,7 +103,7 @@ namespace HSRTimer
         {
             Instance = this;
 #if STORE_IL2CPP
-            _drawWindow = new System.Action<int>(Draw);
+            _drawWindow = new System.Action<int>(DrawStoreWindow);
 #endif
         }
 
@@ -150,6 +152,9 @@ namespace HSRTimer
                 ConfigService.Instance.SaveSettings();
             if (_visible)
             {
+#if STORE_IL2CPP
+                _drawFailed = false;
+#endif
                 _langDropdownOpen = false;
                 _presetDropdownOpen = false;
                 _presetCreating = false;
@@ -184,15 +189,7 @@ namespace HSRTimer
         private void EnsureStyles()
         {
             if (_stylesReady) return;
-            try
-            {
-                _font = Font.CreateDynamicFontFromOSFont(new[]
-                {
-                    "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC",
-                    "Noto Sans CJK", "Heiti SC", "Arial Unicode MS", "Arial",
-                }, 14);
-            }
-            catch { _font = null; }
+            _font = HudFont.Create(14);
             _label = new GUIStyle(GUI.skin.label) { font = _font, fontSize = 13, wordWrap = false };
             _value = new GUIStyle(GUI.skin.label) { font = _font, fontSize = 13 };
             _section = new GUIStyle(GUI.skin.label) { font = _font, fontSize = 14, fontStyle = FontStyle.Bold };
@@ -208,11 +205,75 @@ namespace HSRTimer
         private void OnGUI()
         {
             if (!_visible) return;
-            EnsureStyles();
 #if STORE_IL2CPP
-            _rect = GUI.Window(GetInstanceID(), _rect, _drawWindow, "HSRTimer - " + PluginInfo.RuntimeVersion);
+            if (_drawFailed) return;
+            try
+            {
+                EnsureStyles();
+                _rect = GUI.Window(GetInstanceID(), _rect, _drawWindow, "HSRTimer - " + PluginInfo.RuntimeVersion);
+            }
+            catch (System.Exception ex)
+            {
+                ReportDrawFailure(ex);
+            }
 #else
+            EnsureStyles();
             _rect = GUI.Window(GetInstanceID(), _rect, Draw, "HSRTimer - " + PluginInfo.RuntimeVersion);
+#endif
+        }
+
+#if STORE_IL2CPP
+        private void DrawStoreWindow(int id)
+        {
+            // Catch exceptions before they reach the IL2CPP delegate trampoline.
+            if (_drawFailed) return;
+            try
+            {
+                Draw(id);
+            }
+            catch (System.Exception ex)
+            {
+                ReportDrawFailure(ex);
+            }
+        }
+
+        private void ReportDrawFailure(System.Exception exception)
+        {
+            _drawFailed = true;
+            if (_drawWarningLogged) return;
+            _drawWarningLogged = true;
+            Plugin.Logger.LogWarning($"HSRTimer: settings drawing stopped until reopened: {exception}");
+        }
+#endif
+
+        private int DrawChoices(int selected, string[] choices, int columns, params GUILayoutOption[] options)
+        {
+#if STORE_IL2CPP
+            // Use scalar labels: the string-array overload calls the stripped
+            // GUIContent.Temp(Il2CppStringArray) on the Store player.
+            int result = selected;
+            GUILayout.BeginVertical(options);
+            try
+            {
+                for (int row = 0; row < choices.Length; row += columns)
+                {
+                    GUILayout.BeginHorizontal();
+                    try
+                    {
+                        for (int index = row; index < choices.Length && index < row + columns; index++)
+                        {
+                            bool active = index == selected;
+                            if (GUILayout.Toggle(active, choices[index], _button, GUILayout.ExpandWidth(true)) && !active)
+                                result = index;
+                        }
+                    }
+                    finally { GUILayout.EndHorizontal(); }
+                }
+            }
+            finally { GUILayout.EndVertical(); }
+            return result;
+#else
+            return GUILayout.SelectionGrid(selected, choices, columns, _button, options);
 #endif
         }
 
@@ -266,39 +327,44 @@ namespace HSRTimer
             if (_tab < 0) _tab = 0;
             GUILayout.BeginHorizontal();
 
-            int nextTab = GUILayout.SelectionGrid(_tab, _tabDisplays, 1, _button, GUILayout.Width(120));
-            if (nextTab != _tab)
+            try
             {
-                _tab = nextTab;
-                _presetDeleting = false;
-                _timerHudOpen = false;
-                _expandedColumn = 0;
-                _confirmDeleteColumn = 0;
-                _leaderboardOpen = false;
-                _customTextOpen = false;
-                _expandedCustomText = -1;
-                _confirmDeleteCustomText = -1;
+                int nextTab = DrawChoices(_tab, _tabDisplays, 1, GUILayout.Width(120));
+                if (nextTab != _tab)
+                {
+                    _tab = nextTab;
+                    _presetDeleting = false;
+                    _timerHudOpen = false;
+                    _expandedColumn = 0;
+                    _confirmDeleteColumn = 0;
+                    _leaderboardOpen = false;
+                    _customTextOpen = false;
+                    _expandedCustomText = -1;
+                    _confirmDeleteCustomText = -1;
+                }
+                GUILayout.Space(4);
+
+                _scroll = GUILayout.BeginScrollView(_scroll, GUILayout.ExpandWidth(true));
+
+                try
+                {
+                    switch (_tab)
+                    {
+                        case 0: DrawAbout(loc); break;
+                        case 1: DrawGeneral(cfg, s, loc); break;
+                        case 2: DrawInterface(cfg, loc); break;
+                        case 3: DrawCategory(cfg, loc); break;
+                        case 4: DrawSubsegment(cfg, s, loc); break;
+                        case 5: DrawMarkers(cfg, loc); break;
+                        default: DrawExternalTab(_tab - _tabKeys.Length); break;
+                    }
+
+                    GUILayout.Space(8);
+
+                }
+                finally { GUILayout.EndScrollView(); }
             }
-            GUILayout.Space(4);
-
-            _scroll = GUILayout.BeginScrollView(_scroll, GUILayout.ExpandWidth(true));
-
-            switch (_tab)
-            {
-                case 0: DrawAbout(loc); break;
-                case 1: DrawGeneral(cfg, s, loc); break;
-                case 2: DrawInterface(cfg, loc); break;
-                case 3: DrawCategory(cfg, loc); break;
-                case 4: DrawSubsegment(cfg, s, loc); break;
-                case 5: DrawMarkers(cfg, loc); break;
-                default: DrawExternalTab(_tab - _tabKeys.Length); break;
-            }
-
-            GUILayout.Space(8);
-
-            GUILayout.EndScrollView();
-
-            GUILayout.EndHorizontal();
+            finally { GUILayout.EndHorizontal(); }
 
             GUI.DragWindow(new Rect(0, 0, _rect.width, 20));
         }
@@ -818,7 +884,7 @@ namespace HSRTimer
             string[] projects = { "Aztec%", "Dark%", "Steam%", "Any%" };
             int idx = System.Array.IndexOf(projects, s.SubsegmentMultiProject);
             if (idx < 0) idx = 3;
-            int next = GUILayout.SelectionGrid(idx, projects, 2, _button);
+            int next = DrawChoices(idx, projects, 2);
             if (next != idx) s.SubsegmentMultiProject = projects[next];
 
             Section(loc.Get("SETTINGS_SUBSEGMENT_DETAILS"));
@@ -853,7 +919,7 @@ namespace HSRTimer
             Section(loc.Get("SETTINGS_LEADERBOARD_MODE"));
             string[] modes = { loc.Get("SETTINGS_LEADERBOARD_MODE_SUBSEGMENT"), loc.Get("SETTINGS_LEADERBOARD_MODE_MARKERS") };
             int mi = string.Equals(layout.LeaderboardMode, "Markers", System.StringComparison.OrdinalIgnoreCase) ? 1 : 0;
-            int nextMode = GUILayout.SelectionGrid(mi, modes, 2, _button);
+            int nextMode = DrawChoices(mi, modes, 2);
             if (nextMode != mi)
                 layout.LeaderboardMode = nextMode == 1 ? "Markers" : "Subsegment";
             bool markersMode = string.Equals(layout.LeaderboardMode, "Markers", System.StringComparison.OrdinalIgnoreCase);
@@ -875,7 +941,7 @@ namespace HSRTimer
                 Section(loc.Get("SETTINGS_MARKERS_TIME_MODE"));
                 string[] timeModes = { loc.Get("SETTINGS_MARKERS_TIME_MODE_RELATIVE"), loc.Get("SETTINGS_MARKERS_TIME_MODE_ABSOLUTE") };
                 int ti = string.Equals(layout.LeaderboardMarkersTimeMode, "Absolute", System.StringComparison.OrdinalIgnoreCase) ? 1 : 0;
-                int nextTime = GUILayout.SelectionGrid(ti, timeModes, 2, _button);
+                int nextTime = DrawChoices(ti, timeModes, 2);
                 if (nextTime != ti)
                     layout.LeaderboardMarkersTimeMode = nextTime == 1 ? "Absolute" : "Relative";
                 GUILayout.Label(loc.Get("SETTINGS_LEADERBOARD_MARKERS_NOTE"), _small);
