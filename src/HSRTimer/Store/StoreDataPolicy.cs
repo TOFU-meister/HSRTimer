@@ -14,7 +14,45 @@ namespace HSRTimer
 
         internal const string DataDirectory = "HSRTimer-MicrosoftStore";
 
-        internal static string DataRoot { get; } = GetDataRoot();
+        private static readonly Lazy<string> SelectedRoot = new Lazy<string>(() =>
+        {
+            string root = SelectDataRoot(BepInEx.Paths.ConfigPath, GetDataRoot, Plugin.Logger.LogWarning);
+            Plugin.Logger.LogInfo($"HSRTimer: Store data directory is writable: '{root}'.");
+            return root;
+        });
+
+        internal static string DataRoot => SelectedRoot.Value;
+
+        internal static string SelectDataRoot(string configPath, Func<string> fallbackRoot, Action<string> warn)
+        {
+            string preferred = Path.Combine(configPath, DataDirectory);
+            try
+            {
+                ProbeWritable(preferred);
+                return preferred;
+            }
+            catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException || ex is System.Security.SecurityException)
+            {
+                string fallback = fallbackRoot();
+                warn($"HSRTimer: cannot write to Store data directory '{preferred}': {ex.Message}. Using '{fallback}'.");
+                try { ProbeWritable(fallback); }
+                catch (Exception fallbackFailure) when (fallbackFailure is IOException || fallbackFailure is UnauthorizedAccessException || fallbackFailure is System.Security.SecurityException)
+                {
+                    throw new IOException($"The fallback Store data directory '{fallback}' is also unwritable.", fallbackFailure);
+                }
+                return fallback;
+            }
+        }
+
+        private static void ProbeWritable(string directory)
+        {
+            string probe = Path.Combine(directory, ".write-test-" + Guid.NewGuid().ToString("N"));
+            EnsureSafePath(directory, probe);
+            Directory.CreateDirectory(directory);
+            using var stream = new FileStream(probe, FileMode.CreateNew, FileAccess.Write, FileShare.None, 1, FileOptions.DeleteOnClose);
+            stream.WriteByte(0);
+            stream.Flush(flushToDisk: true);
+        }
 
         private static string GetDataRoot()
         {

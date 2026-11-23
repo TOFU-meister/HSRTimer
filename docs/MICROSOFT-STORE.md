@@ -49,7 +49,16 @@ dotnet run --project .\tests\StoreLogic\StoreLogic.csproj -c Release
 | Full Game | `subsegment/pb/ML/<project>/<category>/meta.json` と `levels/*.jsonl` |
 | Marker PB | `markers/<level>/<category>.json` |
 
-ユーザーデータルートは `%LOCALAPPDATA%\HSRTimer-MicrosoftStore` です。実際のパスと書き込み確認結果は起動ログで確認できます。旧 Store 版の `BepInEx/config/HSRTimer-MicrosoftStore` の INI は、新しい場所に対応ファイルがまだない場合に読み込みます。旧ファイルへの書き込みや、既存の PB、マーカー、プリセット、言語ファイルの自動移行は行いません。必要な PB やマーカーの既存ファイルは Store フォルダーへ手動でコピーできます。外部の Subsegment 参照用 `LoadPath` は引き続き読み取り専用です。
+ユーザーデータルートは既定で `BepInEx/config/HSRTimer-MicrosoftStore` です。起動時に一時ファイルへの書き込みを試し、書き込めない場合は `%LOCALAPPDATA%\HSRTimer-MicrosoftStore` を使います。起動ログの `Store data directory:` で実際の保存先を確認できます。フォールバック時は元のパスと失敗理由も記録します。起動中は同じルートで設定・PB・マーカーなどを読み書きします。外部の Subsegment 参照用 `LoadPath` は引き続き読み取り専用です。
+
+### LocalAppData の設定・記録を引き継ぐ場合
+
+1. ゲームを終了し、LocalAppData と BepInEx の両方の `HSRTimer-MicrosoftStore` フォルダーを別の場所にバックアップします。
+2. LocalAppData 側から、引き継ぎたい INI、`lang`、`presets`、`markers`、`subsegment/pb` をコピーします。IL／ML の PB は、`meta.json` と対応するサンプルを含むカテゴリフォルダーごとコピーします。
+3. コピー先に同名ファイルや同じ PB カテゴリがある場合は、両方をバックアップに保持したまま、どちらの一式を使うか確認してから作業します。個別の JSONL と `meta.json` を異なる記録から混ぜないでください。
+4. 起動ログで BepInEx 側が選ばれたことを確認し、設定と PB 比較を確認します。
+
+自動コピーや自動上書きはありません。保存先を切り替えた直後に別の設定や PB が表示される場合は、起動ログのパスを確認してください。フォールバック実機テストは、書き込み可能な通常環境と、BepInEx 自体は起動できるものの Store 専用データフォルダーには書き込めないテスト用環境で行います。後者ではログに失敗理由と LocalAppData 側のパスが表示されることを確認します。
 
 分類は `dev` と同じで、タグなしは `Any`、有効タグは序数順に並べて `+` で連結します。ファイル名には従来のサニタイズ規則が適用されます。Full Game は `Aztec%`、`Dark%`、`Steam%`、`Any%` の区切りで更新されます。無効な試行やシミュレーションでは記録せず、同タイム・遅いタイムは据え置きます。Marker PB の自動更新は従来どおりソロ／ホスト側で行います。
 

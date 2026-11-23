@@ -52,7 +52,6 @@ namespace HSRTimer
         public System.Collections.Generic.List<string> Tags;
     }
     public class LocalizationService { public string Get(string key) => key; }
-    public static class PersistenceService { public static string PluginDir; }
     public static class Plugin
     {
         public static readonly TestLogger Logger = new TestLogger();
@@ -91,3 +90,5 @@ namespace HSRTimer
             => (_segmentStartLatched, _segmentStartTicks, _segmentStartPause);
     }
 }
+
+namespace BepInEx { public static class Paths { public static string ConfigPath; } }

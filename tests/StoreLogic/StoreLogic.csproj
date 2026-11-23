@@ -15,6 +15,7 @@
     <Compile Include="../../src/HSRTimer/Subsegment/SubsegmentModels.cs" />
     <Compile Include="../../src/HSRTimer/PluginInfo.cs" />
     <Compile Include="../../src/HSRTimer/Store/StoreDataPolicy.cs" />
+    <Compile Include="../../src/HSRTimer/Config/PersistenceService.cs" />
     <Compile Include="../../src/HSRTimer/Store/StoreRecordWriter.cs" />
     <Compile Include="../../src/HSRTimer/Markers/MarkerStore.cs" />
     <Compile Include="../../src/HSRTimer/Markers/MarkerModels.cs" />

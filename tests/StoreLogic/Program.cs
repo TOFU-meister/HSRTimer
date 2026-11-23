@@ -74,15 +74,41 @@ Equal<ulong?>(null, retry.PendingEndTicks, "Abandoned retry attempt has no finis
 TimerCore.RecordSegmentStart();
 Equal((true, 40UL, 0.5), TimerCore.Instance.StartBoundary, "AfterLoad snapshot captures ticks and pause");
 
-string directory = Path.Combine(Path.GetTempPath(), "hsrtimer-store-" + Guid.NewGuid());
+string testRoot = Path.Combine(Path.GetTempPath(), "hsrtimer-store-" + Guid.NewGuid());
+BepInEx.Paths.ConfigPath = Path.Combine(testRoot, "BepInEx", "config");
+string directory = PersistenceService.PluginDir;
+Equal(Path.Combine(BepInEx.Paths.ConfigPath, StoreDataPolicy.DataDirectory), directory, "Writable BepInEx config wins");
+Equal(0, Directory.GetFiles(directory).Length, "Write probe leaves no file");
 Equal(true, StoreDataPolicy.PbWritesEnabled, "Store PB writes are enabled");
 Equal(Path.Combine(directory, "markers"), StoreDataPolicy.ResolveRecordPath(directory, Path.Combine("..", "HSRTimer"), "markers"), "Parent paths cannot reach legacy marker data");
 Equal(Path.Combine(directory, "markers"), StoreDataPolicy.ResolveRecordPath(directory, Path.GetTempPath(), "markers"), "Absolute paths cannot reach legacy marker data");
 Equal(Path.Combine(directory, "custom"), StoreDataPolicy.ResolveRecordPath(directory, "custom", "markers"), "Store marker path can remain inside the isolated directory");
 Directory.CreateDirectory(directory);
-PersistenceService.PluginDir = directory;
+
 try
 {
+    string fallback = Path.Combine(testRoot, "LocalAppData", StoreDataPolicy.DataDirectory);
+    Directory.CreateDirectory(fallback);
+    string original = Path.Combine(fallback, "settings.ini");
+    File.WriteAllText(original, "[hud]\nsize = 99\n");
+    string warning = null;
+    Equal(directory, StoreDataPolicy.SelectDataRoot(BepInEx.Paths.ConfigPath, () => fallback, message => warning = message), "Primary wins even with existing fallback data");
+    Equal<string>(null, warning, "No fallback warning on primary success");
+    string settings = PersistenceService.PathFor("settings.ini");
+    Equal(0, System.Linq.Enumerable.Count(PersistenceService.Read(settings)), "Missing primary settings do not read from fallback");
+    var section = new System.Collections.Generic.Dictionary<string, System.Collections.Generic.IDictionary<string, string>>
+    {
+        ["hud"] = new System.Collections.Generic.Dictionary<string, string> { ["size"] = "22" }
+    };
+    PersistenceService.Write(settings, section);
+    Equal("22", System.Linq.Enumerable.Single(PersistenceService.Read(settings)).Value, "Save and reload settings in BepInEx");
+    string blocked = Path.Combine(testRoot, "blocked");
+    File.WriteAllText(blocked, "file prevents creation of the config directory");
+    Equal(fallback, StoreDataPolicy.SelectDataRoot(blocked, () => fallback, message => warning = message), "Unwritable primary selects fallback");
+    Equal(true, warning.Contains(blocked) && warning.Contains(fallback), "Fallback logs both paths and failure");
+    Equal("[hud]\nsize = 99\n", File.ReadAllText(original), "Fallback settings preserved across both selections");
+    Equal(directory, PersistenceService.PluginDir, "Process data root remains fixed");
+
     string meta = Path.Combine(directory, "meta.json");
     string samples = Path.Combine(directory, "sample.jsonl");
     File.WriteAllText(meta, SubsegmentFileStore.MakeMetaJson("IL", "Mansion", null, "Any", new[] { "Mansion" }, 1250, 1));
@@ -180,7 +206,7 @@ try
 }
 finally
 {
-    Directory.Delete(directory, recursive: true);
+    Directory.Delete(testRoot, recursive: true);
 }
 
 Console.WriteLine("Store logic checks passed.");

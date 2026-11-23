@@ -129,7 +129,7 @@ namespace HSRTimer
         {
             CustomTexts.Clear();
             var path = PersistenceService.PathFor("layout.ini");
-            bool fileExists = System.IO.File.Exists(PersistenceService.ReadConfigPath(path));
+            bool fileExists = System.IO.File.Exists(path);
             var columnsByKey = new Dictionary<int, Dictionary<int, RowType>>(); // column → (row index → row type)
             var legacyRowsByKey = new Dictionary<int, RowType>();
             var tmpTexts = new Dictionary<int, CustomText>();
