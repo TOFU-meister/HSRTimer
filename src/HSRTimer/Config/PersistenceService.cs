@@ -44,7 +44,7 @@ namespace HSRTimer
     {
         /// <summary>The plugin's runtime directory under the BepInEx config root.</summary>
 #if STORE_IL2CPP
-        public static string PluginDir => System.IO.Path.Combine(Paths.ConfigPath, StoreDataPolicy.DataDirectory);
+        public static string PluginDir => StoreDataPolicy.DataRoot;
 #else
         public static string PluginDir => System.IO.Path.Combine(Paths.ConfigPath, PluginInfo.PLUGIN_GUID);
 #endif
@@ -53,9 +53,26 @@ namespace HSRTimer
 
         public static string PathFor(string fileName) => System.IO.Path.Combine(PluginDir, fileName);
 
+        internal static string ReadConfigPath(string path)
+        {
+#if STORE_IL2CPP
+            // Import nothing on disk. Read old Store INIs until a new copy
+            // is saved, retaining the old installation as a backup.
+            string name = System.IO.Path.GetFileName(path);
+            if (!File.Exists(path) && path == PathFor(name)
+                && (name == "settings.ini" || name == "layout.ini" || name == "tags.ini"))
+            {
+                string legacy = System.IO.Path.Combine(Paths.ConfigPath, StoreDataPolicy.DataDirectory, name);
+                if (File.Exists(legacy)) return legacy;
+            }
+#endif
+            return path;
+        }
+
         /// <summary>Read all lines of a file as parsed entries; returns empty on missing file.</summary>
         public static IEnumerable<ParsedLine> Read(string filePath)
         {
+            filePath = ReadConfigPath(filePath);
             var result = new List<ParsedLine>();
             if (!File.Exists(filePath))
                 return result;
@@ -116,7 +133,9 @@ namespace HSRTimer
         {
             try
             {
+#if !STORE_IL2CPP
                 Directory.CreateDirectory(System.IO.Path.GetDirectoryName(filePath));
+#endif
                 var sb = new StringBuilder();
                 if (!string.IsNullOrEmpty(headerComment))
                 {
@@ -132,7 +151,11 @@ namespace HSRTimer
                         sb.Append(kv.Key).Append(" = ").Append(kv.Value).Append('\n');
                     sb.Append('\n');
                 }
+#if STORE_IL2CPP
+                StoreRecordWriter.WriteFile(PluginDir, filePath, sb.ToString(), keepBackup: false);
+#else
                 File.WriteAllText(filePath, sb.ToString(), new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+#endif
             }
             catch (Exception ex)
             {
@@ -145,8 +168,21 @@ namespace HSRTimer
         {
             try
             {
+#if STORE_IL2CPP
+                string probe = PathFor(".write-test-" + Guid.NewGuid().ToString("N"));
+                StoreDataPolicy.EnsureSafePath(PluginDir, probe);
+                StoreDataPolicy.EnsureSafePath(PluginDir, LangDir);
+#endif
                 Directory.CreateDirectory(PluginDir);
                 Directory.CreateDirectory(LangDir);
+#if STORE_IL2CPP
+                using (var stream = new FileStream(probe, FileMode.CreateNew, FileAccess.Write, FileShare.None, 1, FileOptions.DeleteOnClose))
+                {
+                    stream.WriteByte(0);
+                    stream.Flush(flushToDisk: true);
+                }
+                Plugin.Logger.LogInfo("HSRTimer: Store data directory is writable.");
+#endif
             }
             catch (Exception ex)
             {

@@ -2,7 +2,7 @@
   <PropertyGroup>
     <OutputType>Exe</OutputType>
     <TargetFramework>net6.0</TargetFramework>
-    <DefineConstants>$(DefineConstants);STORE_IL2CPP;STORE_PREVIEW</DefineConstants>
+    <DefineConstants>$(DefineConstants);STORE_IL2CPP</DefineConstants>
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="../../src/HSRTimer/Core/GameClock.cs" />
@@ -15,5 +15,9 @@
     <Compile Include="../../src/HSRTimer/Subsegment/SubsegmentModels.cs" />
     <Compile Include="../../src/HSRTimer/PluginInfo.cs" />
     <Compile Include="../../src/HSRTimer/Store/StoreDataPolicy.cs" />
+    <Compile Include="../../src/HSRTimer/Store/StoreRecordWriter.cs" />
+    <Compile Include="../../src/HSRTimer/Markers/MarkerStore.cs" />
+    <Compile Include="../../src/HSRTimer/Markers/MarkerModels.cs" />
+    <Compile Include="../../src/HSRTimer/Markers/MarkerJson.cs" />
   </ItemGroup>
 </Project>

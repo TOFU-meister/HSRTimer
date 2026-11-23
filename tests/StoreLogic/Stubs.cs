@@ -35,15 +35,31 @@ public class Game
 
 namespace HSRTimer
 {
-    public class SettingsModel { public bool AutoReset; }
+    public class SettingsModel
+    {
+        public bool AutoReset;
+        public string MarkersPath;
+        public bool MarkersDebugLogging;
+    }
+    public class ConfigService
+    {
+        public static ConfigService Instance;
+        public SettingsModel Settings;
+        public TestTags EnabledTags;
+    }
+    public class TestTags
+    {
+        public System.Collections.Generic.List<string> Tags;
+    }
     public class LocalizationService { public string Get(string key) => key; }
-    public static class PersistenceService { public const string PluginDir = ""; }
+    public static class PersistenceService { public static string PluginDir; }
     public static class Plugin
     {
         public static readonly TestLogger Logger = new TestLogger();
     }
     public sealed class TestLogger
     {
+        public void LogInfo(string message) => System.Console.WriteLine(message);
         public void LogWarning(string message) => System.Console.WriteLine(message);
     }
 }

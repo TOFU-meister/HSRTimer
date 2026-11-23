@@ -348,6 +348,8 @@ namespace HSRTimer
                 Log($"PB not beaten for '{set.level_id}': {levelMs}ms >= {set.pb.total_ms}ms");
                 return;
             }
+            var previousPb = set.pb;
+            var previousTimes = set.pbTimes;
             set.pb = new MarkerPb
             {
                 total_ms = levelMs,
@@ -357,7 +359,12 @@ namespace HSRTimer
             foreach (var kv in _records)
                 set.pbTimes.Add(new MarkerPbEntry { id = kv.Key, t_ms = kv.Value });
             set.pbTimes.Sort((a, b) => string.CompareOrdinal(a.id, b.id));
-            MarkerStore.Save(set); // synchronous: must land before the run reset (R10.3.3)
+            if (!MarkerStore.Save(set, onlyIfImproved: true))
+            {
+                set.pb = previousPb;
+                set.pbTimes = previousTimes;
+                return;
+            }
             Log($"PB written for '{set.level_id}' at {levelMs}ms ({set.pbTimes.Count} marker(s))");
         }
 

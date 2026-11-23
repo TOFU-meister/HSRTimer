@@ -28,11 +28,7 @@ namespace HSRTimer
         public static string CategoryKey()
         {
             var cfg = ConfigService.Instance;
-            if (cfg == null || cfg.EnabledTags == null || cfg.EnabledTags.Tags.Count == 0)
-                return "Any";
-            var sorted = new List<string>(cfg.EnabledTags.Tags);
-            sorted.Sort(StringComparer.Ordinal);
-            return string.Join("+", sorted);
+            return SubsegmentFileStore.CategoryKey(cfg?.EnabledTags?.Tags);
         }
 
         /// <summary>Resolve the configured markers data root directory.</summary>
@@ -42,8 +38,8 @@ namespace HSRTimer
             string path = cfg != null && !string.IsNullOrEmpty(cfg.Settings.MarkersPath)
                 ? cfg.Settings.MarkersPath
                 : "markers";
-#if STORE_PREVIEW
-            return StoreDataPolicy.ResolvePreviewMarkerPath(PersistenceService.PluginDir, path);
+#if STORE_IL2CPP
+            return StoreDataPolicy.ResolveRecordPath(PersistenceService.PluginDir, path, "markers");
 #else
             return SubsegmentFileStore.ResolvePath(path);
 #endif
@@ -121,7 +117,9 @@ namespace HSRTimer
         /// Atomically write a marker set (temp + rename, R10.3.4). On failure the
         /// old file is preserved and a warning is logged.
         /// </summary>
-        public static bool Save(MarkerSet set)
+        public static bool Save(MarkerSet set) => Save(set, onlyIfImproved: false);
+
+        internal static bool Save(MarkerSet set, bool onlyIfImproved)
         {
             if (set == null)
                 return false;
@@ -132,6 +130,34 @@ namespace HSRTimer
                 set.updated_at = UtcNow();
                 Normalize(set);
                 string path = SetPath(set.level_id, set.category_key);
+#if STORE_IL2CPP
+                string lockPath = path + ".lock";
+                StoreDataPolicy.EnsureSafePath(PersistenceService.PluginDir, path);
+                StoreDataPolicy.EnsureSafePath(PersistenceService.PluginDir, lockPath);
+                Directory.CreateDirectory(Path.GetDirectoryName(path));
+                using var lease = new FileStream(lockPath, FileMode.OpenOrCreate, FileAccess.Write, FileShare.None);
+                if (File.Exists(path))
+                {
+                    var warnings = new List<string>();
+                    string prior = File.ReadAllText(path);
+                    using var document = System.Text.Json.JsonDocument.Parse(prior);
+                    var data = document.RootElement;
+                    if (!data.TryGetProperty("markers", out var definitions) ||
+                        definitions.ValueKind != System.Text.Json.JsonValueKind.Array ||
+                        (data.TryGetProperty("pb", out var pb) && pb.ValueKind != System.Text.Json.JsonValueKind.Null
+                         && (pb.ValueKind != System.Text.Json.JsonValueKind.Object
+                             || !pb.TryGetProperty("total_ms", out var time)
+                             || time.ValueKind != System.Text.Json.JsonValueKind.Number
+                             || !time.TryGetInt64(out _))))
+                        throw new IOException("Existing marker data has invalid fields and was retained.");
+                    if (!MarkerJson.TryParse(prior, out var existing, out var error, warnings)
+                        || warnings.Count > 0)
+                        throw new IOException($"Existing marker data is unreadable and was retained: {error ?? warnings[0]}");
+                    if (onlyIfImproved && existing.pb != null && existing.pb.total_ms != 0
+                        && existing.pb.total_ms <= set.pb.total_ms)
+                        return false;
+                }
+#endif
                 string json = MarkerJson.Write(set);
                 // A save that carries no markers at all is legitimate (a level
                 // with every marker deleted), but it is also the fingerprint of

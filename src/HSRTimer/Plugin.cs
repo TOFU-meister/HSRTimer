@@ -192,6 +192,9 @@ namespace HSRTimer
             string dir = PersistenceService.LangDir;
             try
             {
+#if STORE_IL2CPP
+                StoreDataPolicy.EnsureSafePath(PersistenceService.PluginDir, dir);
+#endif
                 System.IO.Directory.CreateDirectory(dir);
                 CopyIfMissing("en.txt");
                 CopyIfMissing("zh-Hans.txt");

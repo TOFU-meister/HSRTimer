@@ -45,7 +45,11 @@ namespace HSRTimer
             return new SubsegmentOptions
             {
                 Enable = s.SubsegmentEnable,
+#if STORE_IL2CPP
+                PBPath = StoreDataPolicy.ResolveRecordPath(PersistenceService.PluginDir, s.SubsegmentPBPath, "subsegment/pb"),
+#else
                 PBPath = SubsegmentFileStore.ResolvePath(string.IsNullOrEmpty(s.SubsegmentPBPath) ? "subsegment/pb" : s.SubsegmentPBPath),
+#endif
                 LoadPath = SubsegmentFileStore.ResolvePath(string.IsNullOrEmpty(s.SubsegmentLoadPath) ? "subsegment/load" : s.SubsegmentLoadPath),
                 MultiProject = IsValidMultiProject(s.SubsegmentMultiProject) ? s.SubsegmentMultiProject : "Any%",
                 PlaneRadius = s.SubsegmentPlaneRadius,
@@ -883,11 +887,7 @@ namespace HSRTimer
         private string GetCategoryKey()
         {
             var cfg = ConfigService.Instance;
-            if (cfg == null || cfg.EnabledTags == null || cfg.EnabledTags.Tags.Count == 0)
-                return "Any";
-            var sorted = new List<string>(cfg.EnabledTags.Tags);
-            sorted.Sort(StringComparer.Ordinal);
-            return string.Join("+", sorted);
+            return SubsegmentFileStore.CategoryKey(cfg?.EnabledTags?.Tags);
         }
 
         /// <summary>
@@ -964,7 +964,11 @@ namespace HSRTimer
         private void LoadPbIl(string levelId, string category)
         {
             if (string.IsNullOrEmpty(_options.PBPath)) return;
-            TryAddIlReference(Path.Combine(_options.PBPath, "IL", levelId, category), "PB");
+            string dir = Path.Combine(_options.PBPath, "IL", levelId, category);
+#if STORE_IL2CPP
+            dir = StoreRecordWriter.ReadBundleDirectory(dir);
+#endif
+            TryAddIlReference(dir, "PB");
         }
 
         private void LoadLoadIl(string levelId, string category)
@@ -981,7 +985,11 @@ namespace HSRTimer
         private void LoadPbMl(string levelId, string category)
         {
             if (string.IsNullOrEmpty(_options.PBPath)) return;
-            TryAddMlReference(Path.Combine(_options.PBPath, "ML", MultiProjectForLoading, category), "PB", levelId);
+            string dir = Path.Combine(_options.PBPath, "ML", MultiProjectForLoading, category);
+#if STORE_IL2CPP
+            dir = StoreRecordWriter.ReadBundleDirectory(dir);
+#endif
+            TryAddMlReference(dir, "PB", levelId);
         }
 
         private void LoadLoadMl(string levelId, string category)
@@ -1150,7 +1158,17 @@ namespace HSRTimer
 
         // ── PB writing ────────────────────────────────────────────────────
 
+#if STORE_IL2CPP
         private void WriteIlPb(string levelId, RunState state, long endTimeMs)
+        {
+            try { WriteIlPbCore(levelId, state, endTimeMs); }
+            catch (Exception ex) { Plugin.Logger.LogWarning($"HSRTimer: failed to prepare PB: {ex.Message}"); }
+        }
+
+        private void WriteIlPbCore(string levelId, RunState state, long endTimeMs)
+#else
+        private void WriteIlPb(string levelId, RunState state, long endTimeMs)
+#endif
         {
 #if STORE_IL2CPP
             if (!StoreDataPolicy.PbWritesEnabled)
@@ -1163,8 +1181,6 @@ namespace HSRTimer
                 return;
             string category = GetCategoryKey();
             string dir = Path.Combine(_options.PBPath, "IL", levelId, category);
-            string metaPath = Path.Combine(dir, "meta.json");
-
             // IL PB files are per-level: level_index is always 0 and t_ms is
             // relative to the segment start. During an active multi-run the
             // recorder holds cumulative game-time samples (which are correct for
@@ -1173,8 +1189,11 @@ namespace HSRTimer
             long levelStartMs = GameClock.ToMs(GameClock.SegmentStartSeconds(state));
             bool normalizeForIl = _multiRunActive;
             long totalMs = Math.Max(0L, endTimeMs - levelStartMs);
+#if !STORE_IL2CPP
+            string metaPath = Path.Combine(dir, "meta.json");
             if (SubsegmentFileStore.TryReadTotalMs(metaPath, out long existing) && existing <= totalMs)
                 return;
+#endif
 
             var ilSamples = new List<SubsegmentSample>(_currentSamples.Count);
             foreach (var s in _currentSamples)
@@ -1193,17 +1212,32 @@ namespace HSRTimer
                 });
             }
 
-            string samplePath = Path.Combine(dir, "sample.jsonl");
-            if (!SubsegmentFileStore.WriteAtomic(samplePath, SubsegmentFileStore.MakeSampleJson(ilSamples)))
-                return;
             string metaJson = SubsegmentFileStore.MakeMetaJson(
                 "IL", levelId, null, category, null, totalMs, ilSamples.Count);
-            if (!SubsegmentFileStore.WriteAtomic(metaPath, metaJson))
+#if STORE_IL2CPP
+            if (!StoreRecordWriter.TrySaveBetter(PersistenceService.PluginDir, dir, totalMs, metaJson,
+                    new Dictionary<string, string> { ["sample.jsonl"] = SubsegmentFileStore.MakeSampleJson(ilSamples) }))
                 return;
+#else
+            string samplePath = Path.Combine(dir, "sample.jsonl");
+            if (!SubsegmentFileStore.WriteAtomic(samplePath, SubsegmentFileStore.MakeSampleJson(ilSamples))
+                || !SubsegmentFileStore.WriteAtomic(metaPath, metaJson))
+                return;
+#endif
             Plugin.Logger.LogInfo($"HSRTimer: subsegment PB written IL/{levelId}/{category} ({totalMs} ms, {ilSamples.Count} samples).");
         }
 
+#if STORE_IL2CPP
         private void WriteMultiPb(RunState state)
+        {
+            try { WriteMultiPbCore(state); }
+            catch (Exception ex) { Plugin.Logger.LogWarning($"HSRTimer: failed to prepare PB: {ex.Message}"); }
+        }
+
+        private void WriteMultiPbCore(RunState state)
+#else
+        private void WriteMultiPb(RunState state)
+#endif
         {
 #if STORE_IL2CPP
             if (!StoreDataPolicy.PbWritesEnabled)
@@ -1219,23 +1253,30 @@ namespace HSRTimer
                 return;
             string category = GetCategoryKey();
             string dir = Path.Combine(_options.PBPath, "ML", subproject, category);
+#if !STORE_IL2CPP
             string metaPath = Path.Combine(dir, "meta.json");
             if (SubsegmentFileStore.TryReadTotalMs(metaPath, out long existing) && existing <= _multiRunTotalMs)
                 return;
-
-            int sampleCount = _multiRunSamples.Values.Sum(s => s.Count);
+#endif
+            int sampleCount = _multiRunSamples.Values.Sum(samples => samples.Count);
+            string metaJson = SubsegmentFileStore.MakeMetaJson(
+                "ML", null, subproject, category, _multiRunLevelIds.ToArray(), _multiRunTotalMs, sampleCount);
+#if STORE_IL2CPP
+            var files = new Dictionary<string, string>();
+            foreach (var kv in _multiRunSamples)
+                files.Add(Path.Combine("levels", kv.Key + ".jsonl"), SubsegmentFileStore.MakeSampleJson(kv.Value));
+            if (!StoreRecordWriter.TrySaveBetter(PersistenceService.PluginDir, dir, _multiRunTotalMs, metaJson, files))
+                return;
+#else
             foreach (var kv in _multiRunSamples)
             {
                 string samplePath = Path.Combine(dir, "levels", kv.Key + ".jsonl");
                 if (!SubsegmentFileStore.WriteAtomic(samplePath, SubsegmentFileStore.MakeSampleJson(kv.Value)))
                     return;
             }
-
-            string metaJson = SubsegmentFileStore.MakeMetaJson(
-                "ML", null, subproject, category, _multiRunLevelIds.ToArray(), _multiRunTotalMs, sampleCount);
             if (!SubsegmentFileStore.WriteAtomic(metaPath, metaJson))
                 return;
-
+#endif
             Plugin.Logger.LogInfo($"HSRTimer: subsegment PB written ML/{subproject}/{category} ({_multiRunTotalMs} ms, {sampleCount} samples).");
         }
 

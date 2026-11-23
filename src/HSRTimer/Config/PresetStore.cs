@@ -168,7 +168,11 @@ namespace HSRTimer
             try
             {
                 if (File.Exists(layoutSrc))
+#if STORE_IL2CPP
+                    StoreRecordWriter.WriteFile(PersistenceService.PluginDir, layoutDst, File.ReadAllText(layoutSrc), keepBackup: false);
+#else
                     File.Copy(layoutSrc, layoutDst, true);
+#endif
                 else
                     Plugin.Logger.LogWarning($"HSRTimer[presets]: preset '{cfg.Settings.CurrentPreset}' has no layout.ini; keeping current layout.");
             }
@@ -178,8 +182,8 @@ namespace HSRTimer
                 return false;
             }
 
-#if STORE_PREVIEW
-            Plugin.Logger.LogInfo("HSRTimer[presets]: marker snapshots include PB data; restored layout only in the Store preview.");
+#if STORE_IL2CPP
+            Plugin.Logger.LogInfo("HSRTimer[presets]: marker snapshots include PB data; restored layout only on the Store version.");
 #else
             if (!RestoreMarkersFrom(presetDir))
                 Plugin.Logger.LogWarning($"HSRTimer[presets]: failed to restore markers from preset '{cfg.Settings.CurrentPreset}'.");
@@ -233,6 +237,9 @@ namespace HSRTimer
             string dir = DirFor(name);
             try
             {
+#if STORE_IL2CPP
+                StoreDataPolicy.EnsureSafePath(PersistenceService.PluginDir, dir);
+#endif
                 Directory.CreateDirectory(dir);
             }
             catch (Exception ex)
@@ -250,7 +257,7 @@ namespace HSRTimer
                 Plugin.Logger.LogWarning($"HSRTimer[presets]: failed to write layout.ini into preset '{name}': {ex.Message}");
             }
 
-#if !STORE_PREVIEW
+#if !STORE_IL2CPP
             // Flush any in-memory marker edits before snapshotting the markers dir.
             var mgr = MarkersManager.Instance;
             if (mgr != null)

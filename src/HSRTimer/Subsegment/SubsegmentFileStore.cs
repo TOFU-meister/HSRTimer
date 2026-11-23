@@ -27,6 +27,14 @@ namespace HSRTimer
         private static readonly JsonSerializerOptions IndentedFields = new JsonSerializerOptions(Fields) { WriteIndented = true };
 #endif
 
+        internal static string CategoryKey(IEnumerable<string> tags)
+        {
+            var sorted = tags == null ? new List<string>() : new List<string>(tags);
+            if (sorted.Count == 0) return "Any";
+            sorted.Sort(StringComparer.Ordinal);
+            return string.Join("+", sorted);
+        }
+
         public static string SanitizeId(string id)
         {
             if (string.IsNullOrEmpty(id)) return "_";
@@ -48,6 +56,9 @@ namespace HSRTimer
         {
             try
             {
+#if STORE_IL2CPP
+                StoreRecordWriter.WriteFile(PersistenceService.PluginDir, path, content, keepBackup: true);
+#else
                 var dir = Path.GetDirectoryName(path);
                 if (!string.IsNullOrEmpty(dir))
                     Directory.CreateDirectory(dir);
@@ -72,12 +83,15 @@ namespace HSRTimer
                 {
                     File.Move(tmp, path);
                 }
+#endif
                 return true;
             }
             catch (Exception ex)
             {
                 Plugin.Logger.LogWarning($"HSRTimer: subsegment atomic write failed for {path}: {ex.Message}");
+#if !STORE_IL2CPP
                 try { if (File.Exists(path + ".tmp")) File.Delete(path + ".tmp"); } catch { }
+#endif
                 return false;
             }
         }
@@ -90,7 +104,11 @@ namespace HSRTimer
             try
             {
 #if STORE_IL2CPP
-                meta = JsonSerializer.Deserialize<SubsegmentMeta>(File.ReadAllText(path, Encoding.UTF8), Fields);
+                using var document = JsonDocument.Parse(File.ReadAllText(path, Encoding.UTF8));
+                var data = document.RootElement;
+                if (!data.TryGetProperty("format_version", out _) || !data.TryGetProperty("total_ms", out _))
+                    throw new InvalidDataException("Missing PB metadata fields.");
+                meta = data.Deserialize<SubsegmentMeta>(Fields);
 #else
                 meta = JsonUtility.FromJson<SubsegmentMeta>(File.ReadAllText(path, Encoding.UTF8));
 #endif
@@ -161,6 +179,9 @@ namespace HSRTimer
         /// rest of the file is still used (R8.2.7.1).
         /// </summary>
         public static bool TryLoadSamples(string path, out List<SubsegmentSample> samples)
+            => TryLoadSamples(path, out samples, strict: false);
+
+        internal static bool TryLoadSamples(string path, out List<SubsegmentSample> samples, bool strict)
         {
             samples = new List<SubsegmentSample>();
             if (!File.Exists(path)) return false;
@@ -180,10 +201,13 @@ namespace HSRTimer
 #endif
                         if (sample != null)
                             samples.Add(sample);
+                        else if (strict)
+                            return false;
                     }
                     catch (Exception ex)
                     {
-                        Plugin.Logger.LogWarning($"HSRTimer: subsegment {path}({i + 1}): bad sample line skipped: {ex.Message}");
+                        Plugin.Logger.LogWarning($"HSRTimer: subsegment {path}({i + 1}): bad sample line: {ex.Message}");
+                        if (strict) return false;
                     }
                 }
                 return true;

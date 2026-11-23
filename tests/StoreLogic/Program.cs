@@ -75,11 +75,12 @@ TimerCore.RecordSegmentStart();
 Equal((true, 40UL, 0.5), TimerCore.Instance.StartBoundary, "AfterLoad snapshot captures ticks and pause");
 
 string directory = Path.Combine(Path.GetTempPath(), "hsrtimer-store-" + Guid.NewGuid());
-Equal(false, StoreDataPolicy.PbWritesEnabled, "Preview forbids PB writes");
-Equal(Path.Combine(directory, "markers"), StoreDataPolicy.ResolvePreviewMarkerPath(directory, Path.Combine("..", "HSRTimer")), "Parent paths cannot reach legacy marker data");
-Equal(Path.Combine(directory, "markers"), StoreDataPolicy.ResolvePreviewMarkerPath(directory, Path.GetTempPath()), "Absolute paths cannot reach legacy marker data");
-Equal(Path.Combine(directory, "custom"), StoreDataPolicy.ResolvePreviewMarkerPath(directory, "custom"), "Preview marker path can remain inside the isolated directory");
+Equal(true, StoreDataPolicy.PbWritesEnabled, "Store PB writes are enabled");
+Equal(Path.Combine(directory, "markers"), StoreDataPolicy.ResolveRecordPath(directory, Path.Combine("..", "HSRTimer"), "markers"), "Parent paths cannot reach legacy marker data");
+Equal(Path.Combine(directory, "markers"), StoreDataPolicy.ResolveRecordPath(directory, Path.GetTempPath(), "markers"), "Absolute paths cannot reach legacy marker data");
+Equal(Path.Combine(directory, "custom"), StoreDataPolicy.ResolveRecordPath(directory, "custom", "markers"), "Store marker path can remain inside the isolated directory");
 Directory.CreateDirectory(directory);
+PersistenceService.PluginDir = directory;
 try
 {
     string meta = Path.Combine(directory, "meta.json");
@@ -95,6 +96,87 @@ try
     Equal(2, loaded.Count, "Malformed JSONL skipped without discarding good rows");
     Equal(1300L, loaded[1].t_ms, "Legacy sample time");
     Equal(3.5f, loaded[1].px, "Legacy sample position");
+
+    string category = SubsegmentFileStore.CategoryKey(new[] { "Jumpless", "Checkpoint" });
+    Equal("Checkpoint+Jumpless", category, "Order-independent tags");
+    Equal("Any", SubsegmentFileStore.CategoryKey(Array.Empty<string>()), "Untagged category");
+    string il = Path.Combine(directory, "subsegment", "pb", "IL", "Mansion", "Any");
+    string tagged = Path.Combine(directory, "subsegment", "pb", "IL", "Mansion", category);
+    bool SaveIl(string target, string tag, long time, string filename = "sample.jsonl")
+        => StoreRecordWriter.TrySaveBetter(directory, target, time,
+            SubsegmentFileStore.MakeMetaJson("IL", "Mansion", null, tag, null, time, 1),
+            new System.Collections.Generic.Dictionary<string, string> { [filename] = sampleJson });
+    long ReadTime(string dir)
+    {
+        Equal(true, SubsegmentFileStore.TryReadTotalMs(Path.Combine(dir, "meta.json"), out long time), "Read persisted PB");
+        return time;
+    }
+    Equal(true, SaveIl(il, "Any", 1250), "First IL save");
+    Equal(false, SaveIl(il, "Any", 1250), "Tie keeps the prior record");
+    Equal(false, SaveIl(il, "Any", 1500), "Slower run keeps the prior record");
+    Equal(false, SaveIl(il, "Any", 1100, Path.Combine("..", "forbidden")), "Staging write fails safely");
+    using (var lease = new FileStream(il + ".lock", FileMode.Open, FileAccess.Write, FileShare.None))
+        Equal(false, SaveIl(il, "Any", 1050), "Another writer cannot change the active PB");
+    Equal(1250L, ReadTime(il), "Failed write preserves active PB");
+    Equal(true, SaveIl(il, "Any", 1000), "Faster run updates");
+    Equal(1000L, ReadTime(il), "Updated record reloaded");
+    Equal(1250L, ReadTime(il + ".previous"), "Previous complete PB is retained");
+    Equal(true, SaveIl(tagged, category, 1400), "Tagged record saves independently");
+    Equal(1000L, ReadTime(il), "Untagged record unaffected by the tagged run");
+
+    string ml = Path.Combine(directory, "subsegment", "pb", "ML", "Aztec", "Any");
+    var levelFiles = new System.Collections.Generic.Dictionary<string, string>
+    {
+        [Path.Combine("levels", "B0.jsonl")] = sampleJson,
+        [Path.Combine("levels", "B1.jsonl")] = sampleJson,
+    };
+    string MultiMeta(long time) => SubsegmentFileStore.MakeMetaJson("ML", null, "Aztec", "Any", new[] { "B0", "B1" }, time, 2);
+    Equal(true, StoreRecordWriter.TrySaveBetter(directory, ml, 2000, MultiMeta(2000), levelFiles), "First campaign save");
+    Directory.Move(ml, ml + ".previous");
+    Equal(2000L, ReadTime(StoreRecordWriter.ReadBundleDirectory(ml)), "Interrupted swap can be read after restart");
+    Equal(true, StoreRecordWriter.TrySaveBetter(directory, ml, 1900, MultiMeta(1900), levelFiles), "Campaign recovery and update");
+    Equal(1900L, ReadTime(ml), "Updated campaign record");
+    Equal(2000L, ReadTime(ml + ".previous"), "Campaign backup intact");
+
+    string corrupt = Path.Combine(tagged, "meta.json");
+    File.WriteAllText(corrupt, "{");
+    Equal(false, SaveIl(tagged, category, 900), "Unreadable metadata blocks replacement");
+    Equal("{", File.ReadAllText(corrupt), "Unreadable metadata preserved");
+    File.WriteAllText(Path.Combine(il, "sample.jsonl"), "{");
+    Equal(false, SaveIl(il, "Any", 900), "Corrupt samples block replacement");
+    Equal("{", File.ReadAllText(Path.Combine(il, "sample.jsonl")), "Corrupt samples preserved");
+
+    string ini = Path.Combine(directory, "settings.ini");
+    StoreRecordWriter.WriteFile(directory, ini, "size=18", keepBackup: false);
+    StoreRecordWriter.WriteFile(directory, ini, "size=22", keepBackup: false);
+    Equal("size=22", File.ReadAllText(ini), "Atomic settings replacement");
+    if (!OperatingSystem.IsWindows())
+    {
+        string outside = Path.Combine(directory, "existing-records");
+        Directory.CreateDirectory(outside);
+        string isolated = Path.Combine(directory, "store");
+        Directory.CreateDirectory(isolated);
+        Directory.CreateSymbolicLink(Path.Combine(isolated, "link"), outside);
+        Equal(false, StoreRecordWriter.TrySaveBetter(isolated, Path.Combine(isolated, "link", "Any"),
+            900, MultiMeta(900), levelFiles), "Linked path cannot redirect a Store write");
+        Equal(0, Directory.GetFileSystemEntries(outside).Length, "Linked directory untouched");
+    }
+
+    var markers = MarkerStore.CreateEmpty("Mansion", "BuiltIn", 0, "Any");
+    markers.pb = new MarkerPb { total_ms = 2000 };
+    markers.pbTimes.Add(new MarkerPbEntry { id = "finish", t_ms = 1900 });
+    Equal(true, MarkerStore.Save(markers, onlyIfImproved: true), "First marker PB");
+    markers.pb.total_ms = 2200;
+    Equal(false, MarkerStore.Save(markers, onlyIfImproved: true), "Slower marker PB rejected");
+    markers.pb.total_ms = 1800;
+    Equal(true, MarkerStore.Save(markers, onlyIfImproved: true), "Faster marker PB replaces");
+    Equal(true, MarkerStore.TryLoad("Mansion", "Any", out var markerReload), "Marker file reloaded");
+    Equal(1800L, markerReload.pb.total_ms, "Marker PB after reload");
+    string markerPath = MarkerStore.SetPath("Mansion", "Any");
+    Equal(1, Directory.GetFiles(Path.GetDirectoryName(markerPath), "*.bak-*").Length, "Marker backup retained");
+    File.WriteAllText(markerPath, "{");
+    Equal(false, MarkerStore.Save(markers), "Malformed marker file cannot be replaced");
+    Equal("{", File.ReadAllText(markerPath), "Malformed marker file retained");
 }
 finally
 {

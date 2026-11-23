@@ -14,25 +14,63 @@ namespace HSRTimer
 
         internal const string DataDirectory = "HSRTimer-MicrosoftStore";
 
-#if STORE_PREVIEW
-        internal static string ResolvePreviewMarkerPath(string dataDirectory, string configuredPath)
+        internal static string DataRoot { get; } = GetDataRoot();
+
+        private static string GetDataRoot()
         {
-            string root = Path.TrimEndingDirectorySeparator(Path.GetFullPath(dataDirectory))
-                + Path.DirectorySeparatorChar;
+            string userFolder = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+            if (string.IsNullOrEmpty(userFolder))
+                userFolder = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+            if (string.IsNullOrEmpty(userFolder))
+                throw new IOException("Could not locate the current user's data directory.");
+            return Path.Combine(userFolder, DataDirectory);
+        }
+
+        internal static string ResolveRecordPath(string dataDirectory, string configuredPath, string fallback)
+        {
             try
             {
-                string candidate = Path.GetFullPath(configuredPath, root);
-                if (candidate.StartsWith(root, StringComparison.OrdinalIgnoreCase) && candidate.Length > root.Length)
-                    return candidate;
+                if (!Path.IsPathRooted(configuredPath))
+                {
+                    string candidate = Path.GetFullPath(configuredPath, dataDirectory);
+                    if (IsInside(dataDirectory, candidate))
+                        return candidate;
+                }
             }
-            catch (ArgumentException)
+            catch (Exception ex) when (ex is ArgumentException || ex is IOException || ex is UnauthorizedAccessException)
             {
-                // A copied configuration may contain a path from another PC.
+                // Paths copied from another installation may be invalid here.
             }
-
-            return Path.Combine(root, "markers");
+            return Path.Combine(dataDirectory, fallback);
         }
-#endif
+
+        private static bool IsInside(string dataDirectory, string path)
+        {
+            string prefix = Path.TrimEndingDirectorySeparator(Path.GetFullPath(dataDirectory)) + Path.DirectorySeparatorChar;
+            var comparison = OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+            return path.Length > prefix.Length && path.StartsWith(prefix, comparison);
+        }
+
+        internal static void EnsureSafePath(string dataDirectory, string path)
+        {
+            string current = Path.GetFullPath(path);
+            if (!IsInside(dataDirectory, current))
+                throw new IOException("The Store write path must be inside " + dataDirectory);
+
+            // Reject links/junctions, including ancestors of the Store root.
+            // An otherwise isolated path must not redirect writes into Steam.
+            while (current != null)
+            {
+                try
+                {
+                    if ((File.GetAttributes(current) & FileAttributes.ReparsePoint) != 0)
+                        throw new IOException("Store write path crosses a link: " + current);
+                }
+                catch (FileNotFoundException) { }
+                catch (DirectoryNotFoundException) { }
+                current = Path.GetDirectoryName(current);
+            }
+        }
     }
 }
 #endif
